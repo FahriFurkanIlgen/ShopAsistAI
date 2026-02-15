@@ -2,7 +2,7 @@
   "name": "shopasistai",
   "version": "1.0.0",
   "description": "AI-powered shopping assistant for e-commerce sites with product recommendations via Google Feeds",
-  "main": "dist/backend/src/server.js",
+  "main": "dist/backend/backend/src/server.js",
   "scripts": {
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:backend": "nodemon --watch backend/src --ext ts --exec ts-node backend/src/server.ts",
@@ -10,7 +10,7 @@
     "build": "npm run build:backend && npm run build:frontend",
     "build:backend": "tsc -p backend/tsconfig.json",
     "build:frontend": "echo 'Frontend build completed'",
-    "start": "node dist/backend/src/server.js",
+    "start": "node dist/backend/backend/src/server.js",
     "lint": "eslint . --ext .ts",
     "format": "prettier --write \"**/*.{ts,js,json,html,css}\""
   },

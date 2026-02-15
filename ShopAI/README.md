@@ -10,6 +10,8 @@ E-ticaret siteleri için yapay zeka destekli alışveriş asistanı. Google Shop
 - ✅ **Hoş Geldin Mesajı**: Özelleştirilebilir karşılama ekranı
 - ✅ **Privacy Policy & Branding**: Gizlilik politikası uyarısı ve markalama footer'ı
 - ✅ **Google Shopping Feed Entegrasyonu**: XML/RSS formatında ürün feed'lerini otomatik olarak parse eder
+- ✅ **Gelişmiş Arama Motoru**: BM25 + Hybrid search ile text ve attribute matching
+- ✅ **Search Merchandising**: Popülerlik, stok, yeni ürün, kampanya bazlı dinamik ranking
 - ✅ **Akıllı Önbellek Sistemi**: Ürün verilerini 1 saat boyunca cache'de tutar
 - ✅ **Otomatik Güncelleme**: Her saat başında ürün verilerini otomatik olarak yeniler
 - ✅ **AI Destekli Sohbet**: OpenAI GPT-4 ile doğal dil kullanarak ürün önerileri
@@ -150,20 +152,72 @@ GET /api/products/:siteId/search?q=koşu
 GET /api/products/:siteId/category?keywords=shoes,sneakers,running
 ```
 
+### Merchandising (Yeni!)
+```
+GET /api/merchandising/config/:siteId
+```
+Merchandising konfigürasyonunu getir.
+
+```
+POST /api/merchandising/config/:siteId
+Content-Type: application/json
+
+{
+  "signalWeights": {
+    "textRelevance": 0.35,
+    "attributeMatch": 0.25,
+    "popularity": 0.15,
+    ...
+  },
+  "businessRules": {
+    "boostNewProducts": true,
+    "diversifyResults": true,
+    ...
+  }
+}
+```
+Merchandising konfigürasyonunu güncelle.
+
+```
+POST /api/merchandising/brand-boost/:siteId
+Content-Type: application/json
+
+{
+  "brandBoosts": {
+    "skechers": 5.0,
+    "nike": 3.0
+  }
+}
+```
+Marka boost'larını ayarla (kampanyalar için).
+
+Detaylı bilgi için [MERCHANDISING_GUIDE.md](./MERCHANDISING_GUIDE.md) dosyasına bakın.
+
 ## 🏗️ Proje Yapısı
 
 ```
 ShopAsistAI/
 ├── backend/
 │   ├── src/
-│   │   ├── server.ts           # Ana sunucu
+│   │   ├── server.ts              # Ana sunucu
 │   │   ├── routes/
-│   │   │   ├── chat.ts         # Chat endpoint'leri
-│   │   │   └── products.ts     # Ürün endpoint'leri
-│   │   └── services/
-│   │       ├── aiService.ts    # OpenAI entegrasyonu
-│   │       ├── cacheService.ts # Cache yönetimi
-│   │       └── feedParser.ts   # Feed parser
+│   │   │   ├── chat.ts            # Chat endpoint'leri
+│   │   │   ├── products.ts        # Ürün endpoint'leri
+│   │   │   ├── config.ts          # Config endpoint'leri
+│   │   │   ├── search.ts          # Arama endpoint'leri
+│   │   │   └── merchandising.ts   # Merchandising API (YENİ!)
+│   │   ├── services/
+│   │   │   ├── aiService.ts       # OpenAI entegrasyonu
+│   │   │   ├── cacheService.ts    # Cache yönetimi
+│   │   │   └── feedParser.ts      # Feed parser
+│   │   └── search/
+│   │       ├── SearchService.ts        # Ana arama servisi
+│   │       ├── BM25Scorer.ts           # BM25 algoritması
+│   │       ├── AttributeBooster.ts     # Attribute matching
+│   │       ├── MerchandisingEngine.ts  # Merchandising (YENİ!)
+│   │       ├── InvertedIndex.ts        # Index yapısı
+│   │       ├── QueryParser.ts          # Query parsing
+│   │       └── ProductIndexer.ts       # Ürün indexleme
 │   └── tsconfig.json
 ├── frontend/
 │   Widget Konfigürasyonu

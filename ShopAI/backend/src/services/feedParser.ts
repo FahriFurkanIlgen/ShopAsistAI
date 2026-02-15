@@ -64,14 +64,42 @@ export class FeedParserService {
           : [parsed.feed.entry];
       }
 
-      return items
-        .map((item) => this.parseProduct(item))
+      const allProducts = items.map((item) => this.parseProduct(item)).filter(p => p !== null);
+      
+      // Log before stock filtering
+      const size28Products = allProducts.filter(p => p?.size === '28');
+      console.log(`[FeedParser] Found ${size28Products.length} products with size 28 (before stock filter)`);
+      if (size28Products.length > 0) {
+        console.log(`[FeedParser] Size 28 samples:`, size28Products.slice(0, 3).map(p => ({
+          id: p.id, 
+          title: p.title.substring(0, 50), 
+          size: p.size, 
+          availability: p.availability,
+          gender: p.gender
+        })));
+      }
+      
+      const inStockProducts = allProducts
         .filter((p) => {
           if (!p) return false;
           // Only include products that are in stock
           const availability = p.availability?.toLowerCase() || '';
           return availability.includes('in stock') || availability.includes('stokta');
         }) as Product[];
+      
+      // Log after stock filtering for size 28
+      const size28InStock = inStockProducts.filter(p => p.size === '28');
+      console.log(`[FeedParser] Size 28 products AFTER stock filter: ${size28InStock.length}`);
+      if (size28InStock.length > 0) {
+        console.log(`[FeedParser] Size 28 IN STOCK samples:`, size28InStock.slice(0, 5).map(p => ({
+          id: p.id,
+          title: p.title.substring(0, 40),
+          gender: p.gender,
+          productType: p.productType?.substring(0, 30)
+        })));
+      }
+      
+      return inStockProducts;
     } catch (error) {
       console.error('Error extracting products:', error);
       return [];
@@ -89,6 +117,23 @@ export class FeedParserService {
       const id = getValue('id') || getValue('guid') || '';
       if (!id) return null;
 
+      const productType = getValue('product_type');
+      let gender = getValue('gender');
+      
+      // If gender is not provided, extract from productType
+      if (!gender && productType) {
+        const normalizedType = productType.toLowerCase();
+        if (normalizedType.includes('kız') || normalizedType.includes('kiz')) {
+          gender = 'Kız';
+        } else if (normalizedType.includes('erkek çocuk')) {
+          gender = 'Erkek Çocuk';
+        } else if (normalizedType.includes('kadın') || normalizedType.includes('kadin')) {
+          gender = 'Kadın';
+        } else if (normalizedType.includes('erkek')) {
+          gender = 'Erkek';
+        }
+      }
+      
       const product: Product = {
         id,
         title: getValue('title'),
@@ -103,9 +148,10 @@ export class FeedParserService {
         mpn: getValue('mpn'),
         condition: getValue('condition') || 'new',
         googleProductCategory: getValue('google_product_category'),
-        productType: getValue('product_type'),
+        productType,
         color: getValue('color'),
         size: getValue('size'),
+        gender, // Extracted from productType if not provided
       };
 
       // Handle additional images

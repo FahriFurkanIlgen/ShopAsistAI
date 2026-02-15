@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Alakasız Sorgular</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .test-group {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        .query-button {
+            margin: 10px 5px;
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .query-button:hover {
+            background-color: #0056b3;
+        }
+        .response-box {
+            margin-top: 15px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            white-space: pre-wrap;
+            display: none;
+        }
+        .response-box.show {
+            display: block;
+        }
+        h2 {
+            color: #333;
+        }
+        h3 {
+            color: #666;
+            margin-top: 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 Alakasız Sorgu Testi</h1>
+    <p>Aşağıdaki butonlara tıklayarak alakasız sorguların nasıl ele alındığını test edebilirsiniz:</p>
+
+    <div class="test-group">
+        <h3>🌤️ Hava Durumu Sorguları</h3>
+        <button class="query-button" onclick="testQuery('bugün hava kaç derece olacak')">Bugün hava kaç derece olacak</button>
+        <button class="query-button" onclick="testQuery('yarın yağmur yağacak mı')">Yarın yağmur yağacak mı</button>
+        <button class="query-button" onclick="testQuery('hava durumu nasıl')">Hava durumu nasıl</button>
+        <div id="response-weather" class="response-box"></div>
+    </div>
+
+    <div class="test-group">
+        <h3>📍 Mağaza Lokasyonu Sorguları</h3>
+        <button class="query-button" onclick="testQuery('hangi mağazada var bu bedeni ben istanbulda yaşıyorum')">Hangi mağazada var (İstanbul)</button>
+        <button class="query-button" onclick="testQuery('en yakın mağaza nerede')">En yakın mağaza nerede</button>
+        <button class="query-button" onclick="testQuery('ankara şubeleriniz var mı')">Ankara şubeleriniz var mı</button>
+        <div id="response-store" class="response-box"></div>
+    </div>
+
+    <div class="test-group">
+        <h3>👋 Genel Selamlaşma</h3>
+        <button class="query-button" onclick="testQuery('merhaba')">Merhaba</button>
+        <button class="query-button" onclick="testQuery('nasılsın')">Nasılsın</button>
+        <button class="query-button" onclick="testQuery('kimsin')">Kimsin</button>
+        <div id="response-greeting" class="response-box"></div>
+    </div>
+
+    <div class="test-group">
+        <h3>⏰ Zaman Sorguları</h3>
+        <button class="query-button" onclick="testQuery('saat kaç')">Saat kaç</button>
+        <div id="response-time" class="response-box"></div>
+    </div>
+
+    <div class="test-group">
+        <h3>✅ İlgili Sorgular (Karşılaştırma)</h3>
+        <button class="query-button" onclick="testQuery('42 numara siyah spor ayakkabı')">42 numara siyah spor ayakkabı</button>
+        <button class="query-button" onclick="testQuery('erkek bot modelleri')">Erkek bot modelleri</button>
+        <button class="query-button" onclick="testQuery('çocuk ayakkabısı')">Çocuk ayakkabısı</button>
+        <div id="response-relevant" class="response-box"></div>
+    </div>
+
+    <script>
+        async function testQuery(message) {
+            // Hide all response boxes
+            document.querySelectorAll('.response-box').forEach(box => {
+                box.classList.remove('show');
+            });
+
+            // Determine which response box to show
+            let responseBox;
+            if (message.includes('hava') || message.includes('yağmur') || message.includes('derece')) {
+                responseBox = document.getElementById('response-weather');
+            } else if (message.includes('mağaza') || message.includes('şube') || message.includes('nerede') || message.includes('istanbul') || message.includes('ankara')) {
+                responseBox = document.getElementById('response-store');
+            } else if (message.includes('merhaba') || message.includes('nasılsın') || message.includes('kimsin')) {
+                responseBox = document.getElementById('response-greeting');
+            } else if (message.includes('saat')) {
+                responseBox = document.getElementById('response-time');
+            } else {
+                responseBox = document.getElementById('response-relevant');
+            }
+
+            responseBox.textContent = 'Yükleniyor...';
+            responseBox.classList.add('show');
+
+            try {
+                const response = await fetch('http://localhost:3000/api/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        siteId: 'skechers-tr',
+                        message: message,
+                    }),
+                });
+
+                const data = await response.json();
+                
+                // Format response
+                let formattedResponse = `📩 Sorgu: "${message}"\n\n`;
+                formattedResponse += `💬 Yanıt:\n${data.message}\n\n`;
+                
+                if (data.recommendedProducts && data.recommendedProducts.length > 0) {
+                    formattedResponse += `🛍️ Önerilen Ürünler (${data.recommendedProducts.length}):\n`;
+                    data.recommendedProducts.forEach((product, index) => {
+                        formattedResponse += `${index + 1}. ${product.title} - ${product.salePrice || product.price}\n`;
+                    });
+                } else {
+                    formattedResponse += `✅ Ürün önerisi yok (Alakasız sorgu tespit edildi)\n`;
+                }
+
+                if (data.debug) {
+                    formattedResponse += `\n🐛 Debug Info:\n`;
+                    formattedResponse += `   Query Type: ${data.debug.queryType || 'relevant'}\n`;
+                    formattedResponse += `   Is Follow-up: ${data.debug.isFollowUp || false}\n`;
+                }
+
+                responseBox.textContent = formattedResponse;
+            } catch (error) {
+                responseBox.textContent = `❌ Hata: ${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html>

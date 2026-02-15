@@ -212,6 +212,33 @@ body {
   border-bottom-left-radius: 4px;
 }
 
+.message p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* Products inside chat message */
+.products-in-message {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: 100%;
+}
+
+.products-in-message .product-card {
+  background: white;
+  border: 1px solid #e5e7eb;
+  margin-bottom: 0;
+}
+
+.products-in-message .product-card:hover {
+  background: #f9fafb;
+  border-color: var(--primary-color);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+}
+
 .message.loading {
   background: var(--bg-color);
   color: var(--text-color);

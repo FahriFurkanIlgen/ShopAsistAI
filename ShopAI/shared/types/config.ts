@@ -1,5 +1,13 @@
 // Widget configuration types
 
+/**
+ * Query Parser Versions
+ * v1: Regex-only (fast, basic)
+ * v2: Hybrid (regex for simple, AI for complex)
+ * v3: AI-only (intelligent, slower)
+ */
+export type QueryParserVersion = 'v1' | 'v2' | 'v3';
+
 export interface WidgetConfig {
   siteId: string;
   siteName: string;
@@ -12,6 +20,7 @@ export interface WidgetConfig {
   privacyPolicyUrl?: string;
   brandingText?: string;
   showBranding?: boolean;
+  queryParserVersion?: QueryParserVersion; // Default: v1
 }
 
 export interface ProductCategory {
@@ -29,6 +38,7 @@ export const DEFAULT_CONFIG: Partial<WidgetConfig> = {
   welcomeSubtext: 'New season, combination suggestions and order support.',
   showBranding: true,
   brandingText: 'Powered by ShopAsistAI',
+  queryParserVersion: 'v3',
 };
 
 export const DEFAULT_CATEGORIES: ProductCategory[] = [

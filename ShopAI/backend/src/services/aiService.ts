@@ -1,10 +1,12 @@
 import OpenAI from 'openai';
 import { ChatMessage, ChatRequest, ChatResponse, Product } from '../../../shared/types';
 import { CacheService } from './cacheService';
+import { SimpleCache } from './simpleCache';
 
 export class AIService {
   private openai: OpenAI;
   private cacheService: CacheService;
+  private responseCache: SimpleCache<ChatResponse>;
 
   constructor(cacheService: CacheService) {
     const apiKey = process.env.OPENAI_API_KEY;
@@ -14,11 +16,27 @@ export class AIService {
 
     this.openai = new OpenAI({ apiKey });
     this.cacheService = cacheService;
+    this.responseCache = new SimpleCache<ChatResponse>(500, 300000); // Cache 500 responses for 5 min
   }
 
   async chat(request: ChatRequest): Promise<ChatResponse> {
     try {
       const { siteId, message, conversationHistory = [] } = request;
+
+      // Check for irrelevant queries first
+      const irrelevantResponse = this.checkIrrelevantQuery(message, siteId);
+      if (irrelevantResponse) {
+        console.log(`[AIService] Irrelevant query detected: "${message}"`);
+        return irrelevantResponse;
+      }
+
+      // Check response cache
+      const cacheKey = this.buildCacheKey(message, conversationHistory);
+      const cachedResponse = this.responseCache.get(cacheKey);
+      if (cachedResponse) {
+        console.log(`[AIService] Response cache HIT for: "${message}"`);
+        return cachedResponse;
+      }
 
       const products = this.cacheService.getProducts(siteId);
       if (!products || products.length === 0) {
@@ -27,24 +45,96 @@ export class AIService {
         };
       }
 
-      const relevantProducts = this.findRelevantProducts(products, message);
-      const messages = this.buildMessages(message, conversationHistory, relevantProducts, siteId);
+      // CONTEXT-AWARE SEARCH: Build search query with conversation context
+      // If user says "erkek için var mı", we need previous context (28 numara, ışıklı, ayakkabı)
+      const searchQuery = this.buildSearchQuery(message, conversationHistory);
+      const isFollowUp = searchQuery !== message; // Enhanced query indicates follow-up
+      
+      console.log(`[AIService] Original message: "${message}"`);
+      console.log(`[AIService] Search query with context: "${searchQuery}"`);
+      console.log(`[AIService] Is follow-up: ${isFollowUp}`);
+      
+      // Use hybrid search engine (BM25 + attribute boosting)
+      // Fetch MORE products (100) so size filtering has enough candidates
+      const relevantProducts = await this.cacheService.hybridSearch(siteId, searchQuery, 100);
+      
+      console.log(`[AIService] Hybrid search found ${relevantProducts.length} products`);
+      console.log(`[AIService] Top 10 product sizes:`, relevantProducts.slice(0, 10).map(p => `${p.id}:${p.size}`).join(', '));
+      
+      // Apply additional filters and deduplication
+      const finalProducts = this.postProcessResults(relevantProducts, searchQuery);
+      
+      // Check if user requested specific size but no products found
+      // Let AI handle this case - it can suggest alternatives
+      const sizeMatch = message.match(/\b(\d{1,2}(?:\.\d)?)\s*(?:numara|beden|size)?\b/i);
+      if (sizeMatch && finalProducts.length === 0) {
+        const requestedSize = sizeMatch[1];
+        
+        // Don't immediately give up - let AI suggest alternatives
+        console.log(`[AIService] No products found for size ${requestedSize}, letting AI suggest alternatives`);
+        
+        // Get products without size filter for AI to suggest alternatives
+        const allProducts = this.postProcessAlternatives(relevantProducts, message);
+        
+        if (allProducts.length === 0) {
+          return {
+            message: `Üzgünüm, ${requestedSize} numara için stokta ürün bulamadım. Farklı bir numara denemek ister misiniz?`,
+          };
+        }
+        
+        // Build messages with alternative products
+        const altMessages = this.buildMessages(message, conversationHistory, allProducts, siteId);
+        
+        const completion = await this.openai.chat.completions.create({
+          model: process.env.OPENAI_MODEL || 'gpt-4-turbo-preview',
+          messages: altMessages,
+          temperature: 0.7,
+          max_tokens: 250,
+          presence_penalty: 0.6,
+          frequency_penalty: 0.3,
+        });
+
+        const aiMessage = completion.choices[0]?.message?.content || 
+          `Üzgünüm, ${requestedSize} numara için ürün bulamadım ama yakın bedenlerimiz var.`;
+
+        return {
+          message: aiMessage,
+          recommendedProducts: allProducts.slice(0, 3),
+          debug: {
+            originalQuery: message,
+            enhancedQuery: searchQuery,
+            isFollowUp,
+          },
+        };
+      }
+      
+      const messages = this.buildMessages(message, conversationHistory, finalProducts, siteId);
 
       const completion = await this.openai.chat.completions.create({
         model: process.env.OPENAI_MODEL || 'gpt-4-turbo-preview',
         messages,
-        temperature: 0.8,
-        max_tokens: 400,
+        temperature: 0.7,
+        max_tokens: 250, // Reduced from 400 for token efficiency (2-3 sentence responses)
         presence_penalty: 0.6,
         frequency_penalty: 0.3,
       });
 
       const aiMessage = completion.choices[0]?.message?.content || 'Üzgünüm, bir yanıt oluşturamadım.';
 
-      return {
+      const response: ChatResponse = {
         message: aiMessage,
-        recommendedProducts: relevantProducts.slice(0, 3),
+        recommendedProducts: finalProducts.slice(0, 3),
+        debug: {
+          originalQuery: message,
+          enhancedQuery: searchQuery,
+          isFollowUp,
+        },
       };
+
+      // Cache the response
+      this.responseCache.set(cacheKey, response);
+
+      return response;
     } catch (error) {
       console.error('AI Service Error:', error);
       return {
@@ -53,6 +143,224 @@ export class AIService {
     }
   }
 
+  /**
+   * Post-process search results: deduplication, availability filtering, size filtering
+   */
+  private postProcessResults(products: Product[], query: string): Product[] {
+    console.log(`[AIService] postProcessResults: input ${products.length} products`);
+    
+    // Extract attributes from query for deduplication logic
+    const hasColorKeyword = /beyaz|siyah|white|black|k[ıi]rm[ıi]z[ıi]|mavi|ye[şs]il|gri/i.test(query);
+    const sizeMatch = query.match(/\b(\d{1,2}(?:\.\d)?)\s*(?:numara|beden|size)?\b/i);
+    const requestedSize = sizeMatch ? sizeMatch[1] : null;
+
+    // Filter out of stock products
+    let filtered = products.filter(p => {
+      const availability = p.availability?.toLowerCase() || '';
+      return availability.includes('in stock') || availability.includes('stokta') || !p.availability;
+    });
+    
+    console.log(`[AIService] After stock filter: ${filtered.length} products`);
+    
+    // Filter out kids products when user asks for adult sizes (>= 40)
+    if (requestedSize && parseFloat(requestedSize) >= 40) {
+      const adultFiltered = filtered.filter(p => {
+        const category = (p.productType || '').toLowerCase();
+        // Exclude kids/children categories
+        return !category.includes('çocuk') && !category.includes('cocuk') && 
+               !category.includes('kids') && !category.includes('children');
+      });
+      
+      console.log(`[AIService] Adult category filter: ${filtered.length} -> ${adultFiltered.length} products`);
+      
+      // Only apply if we have adult products
+      if (adultFiltered.length > 0) {
+        filtered = adultFiltered;
+      }
+    }
+
+    // SMART: Size filter with fallback to nearby sizes
+    if (requestedSize) {
+      console.log(`[AIService] Filtering for exact size: ${requestedSize}`);
+      console.log(`[AIService] Available sizes in filtered products:`, [...new Set(filtered.slice(0, 30).map(p => p.size))].join(', '));
+      
+      // Try exact match first
+      const exactSizeFiltered = filtered.filter(p => {
+        if (!p.size) return false;
+        const productSize = String(p.size).trim();
+        
+        // Reject size ranges (e.g., "43-46") when user asks for exact size
+        if (productSize.includes('-')) {
+          return false;
+        }
+        
+        const querySizeNum = parseFloat(requestedSize);
+        const productSizeNum = parseFloat(productSize);
+        
+        // Exact match or decimal variations (e.g., "42" matches "42.0")
+        return productSize === requestedSize || 
+               (!isNaN(productSizeNum) && !isNaN(querySizeNum) && productSizeNum === querySizeNum);
+      });
+      
+      console.log(`[AIService] Exact size filter: ${filtered.length} -> ${exactSizeFiltered.length} products`);
+      
+      // If exact match found, use it
+      if (exactSizeFiltered.length > 0) {
+        filtered = exactSizeFiltered;
+      } else {
+        // NO exact match - try nearby sizes (±1 size)
+        const querySizeNum = parseFloat(requestedSize);
+        const nearbySizeFiltered = filtered.filter(p => {
+          if (!p.size) return false;
+          const productSize = String(p.size).trim();
+          
+          if (productSize.includes('-')) return false;
+          
+          const productSizeNum = parseFloat(productSize);
+          if (isNaN(productSizeNum) || isNaN(querySizeNum)) return false;
+          
+          // Allow ±1 size tolerance (e.g., for 43: accept 42, 42.5, 43.5, 44)
+          const sizeDiff = Math.abs(productSizeNum - querySizeNum);
+          return sizeDiff <= 1.0;
+        });
+        
+        console.log(`[AIService] Nearby size filter (±1): ${nearbySizeFiltered.length} products`);
+        
+        // Use nearby sizes if found, otherwise keep empty to let AI handle it
+        filtered = nearbySizeFiltered;
+      }
+    }
+
+    // Apply deduplication if needed
+    const hasSizeKeyword = Boolean(requestedSize);
+    if (!hasColorKeyword || !hasSizeKeyword) {
+      const deduplicated = this.deduplicateProducts(filtered, hasColorKeyword, hasSizeKeyword);
+      console.log(`[AIService] After deduplication: ${deduplicated.length} products`);
+      return deduplicated;
+    }
+
+    console.log(`[AIService] Final results: ${filtered.length} products`);
+    return filtered.slice(0, 10);
+  }
+
+  /**
+   * Post-process for alternative suggestions (no size filter, only stock)
+   * Used when exact size not found to suggest nearby sizes
+   */
+  private postProcessAlternatives(products: Product[], query: string): Product[] {
+    console.log(`[AIService] postProcessAlternatives: input ${products.length} products`);
+    
+    const hasColorKeyword = /beyaz|siyah|white|black|k[ıi]rm[ıi]z[ıi]|mavi|ye[şs]il|gri/i.test(query);
+    
+    // Extract requested size to filter by nearby sizes
+    const sizeMatch = query.match(/\b(\d{1,2}(?:\.\d)?)\s*(?:numara|beden|size)?\b/i);
+    const requestedSize = sizeMatch ? sizeMatch[1] : null;
+
+    // Filter out of stock products
+    let filtered = products.filter(p => {
+      const availability = p.availability?.toLowerCase() || '';
+      return availability.includes('in stock') || availability.includes('stokta') || !p.availability;
+    });
+    
+    console.log(`[AIService] After stock filter: ${filtered.length} products`);
+    
+    // If size was requested, filter for nearby sizes (±2 sizes for alternatives)
+    if (requestedSize) {
+      const querySizeNum = parseFloat(requestedSize);
+      const nearbySizeFiltered = filtered.filter(p => {
+        if (!p.size) return false;
+        const productSize = String(p.size).trim();
+        
+        if (productSize.includes('-')) return false;
+        
+        const productSizeNum = parseFloat(productSize);
+        if (isNaN(productSizeNum) || isNaN(querySizeNum)) return false;
+        
+        // Allow ±2 size tolerance for alternatives (e.g., for 43: accept 41, 42, 43, 44, 45)
+        const sizeDiff = Math.abs(productSizeNum - querySizeNum);
+        return sizeDiff <= 2.0;
+      });
+      
+      console.log(`[AIService] Nearby size filter (±2) for alternatives: ${filtered.length} -> ${nearbySizeFiltered.length} products`);
+      filtered = nearbySizeFiltered;
+    }
+    
+    // Filter out kids products when user asks for adult sizes (>= 40)
+    if (requestedSize && parseFloat(requestedSize) >= 40) {
+      const adultFiltered = filtered.filter(p => {
+        const category = (p.productType || '').toLowerCase();
+        // Exclude kids/children categories
+        return !category.includes('çocuk') && !category.includes('cocuk') && 
+               !category.includes('kids') && !category.includes('children');
+      });
+      
+      console.log(`[AIService] Adult category filter: ${filtered.length} -> ${adultFiltered.length} products`);
+      
+      // Only apply if we have adult products
+      if (adultFiltered.length > 0) {
+        filtered = adultFiltered;
+      }
+    }
+
+    // Light deduplication (keep more variety for alternatives)
+    const deduplicated = this.deduplicateProducts(filtered, hasColorKeyword, false);
+    console.log(`[AIService] After deduplication: ${deduplicated.length} products`);
+    
+    return deduplicated.slice(0, 10);
+  }
+
+  /**
+   * Deduplicate products by model (keeping highest scored variant)
+   * Updated: Uses product.id as primary deduplication key to prevent same product variants
+   */
+  private deduplicateProducts(products: Product[], hasColor: boolean, hasSize: boolean): Product[] {
+    const seenKeys = new Set<string>();
+    const deduplicated: Product[] = [];
+
+    for (const product of products) {
+      let dedupeKey: string;
+
+      // Primary deduplication: Use product ID to prevent exact duplicates
+      const productIdBase = product.id.split(/\s+/)[0]; // Get base ID without variants
+      
+      if (!hasColor && !hasSize) {
+        // No color or size -> dedupe by base product ID only (prevents variant duplicates)
+        dedupeKey = productIdBase;
+      } else if (hasColor && !hasSize) {
+        // Has color but no size -> group by base ID + color (show one per color)
+        dedupeKey = `${productIdBase}_${product.color || ''}`;
+      } else if (!hasColor && hasSize) {
+        // Has size but no color -> group by base ID + size (show one per size)
+        dedupeKey = `${productIdBase}_${product.size || ''}`;
+      } else {
+        // Has both color and size -> show specific variant
+        dedupeKey = `${productIdBase}_${product.color || ''}_${product.size || ''}`;
+      }
+
+      if (!seenKeys.has(dedupeKey)) {
+        seenKeys.add(dedupeKey);
+        deduplicated.push(product);
+      }
+    }
+
+    return deduplicated;
+  }
+
+  /**
+   * Extract model key from product title (remove color and size codes)
+   */
+ private extractModelKey(title: string): string {
+    return title
+      .replace(/\s+(BLK|WHT|BLU|RED|GRY|BBK|WSL|NVY|PNK|GRN|YLW|ORG|PRP|MLT|BKMT|CCMT|CHAR|GYBK|GYMT|NVHP|NVRD|OFBK|OFMT|TAN|TPE|DKTP|OLBK|GYBL|NVBL|NVLM|NVGR|NVPK|TPBK|OFWT|NVCC|TPMT|BKFS|BKRG|CHBK|GYAQ|NVAQ|TPAQ|WBK|WMLT|WNVY|WTPK)\s*$/i, '')
+      .replace(/\s+\d{1,2}(\.\d)?$/i, '')
+      .trim();
+  }
+
+  /**
+   * Legacy method kept for backward compatibility
+   * Now just redirects to hybrid search
+   */
+  // @ts-ignore - Kept for backward compatibility
   private findRelevantProducts(products: Product[], query: string): Product[] {
     const lowerQuery = query.toLowerCase();
     
@@ -66,23 +374,112 @@ export class AIService {
         .replace(/ç/g, 'c');
     
     const normalizedQuery = normalizeText(lowerQuery);
-    const keywords = normalizedQuery.split(/\s+/).filter((w) => w.length > 2);
+    
+    // Extract size/number patterns
+    const sizePattern = /\b(\d{1,2})\s*(numara|beden|size)?\b/i;
+    const sizeMatch = query.match(sizePattern);
+    const searchedSize = sizeMatch ? sizeMatch[1] : null;
+    
+    // Extract price limit (e.g., "4000 liradan ucuz", "1000 TL altı")
+    const pricePattern = /(\d+)\s*(lira|tl)?\s*(dan|den|altı|az|ucuz|üstü|üzeri|fazla)/i;
+    const priceMatch = query.match(pricePattern);
+    let maxPrice = null;
+    let minPrice = null;
+    
+    if (priceMatch) {
+      const priceValue = parseFloat(priceMatch[1]);
+      const priceQualifier = priceMatch[3]?.toLowerCase();
+      
+      if (priceQualifier.includes('dan') || priceQualifier.includes('den') || 
+          priceQualifier.includes('ucuz') || priceQualifier.includes('alt') || 
+          priceQualifier.includes('az')) {
+        maxPrice = priceValue;
+      } else if (priceQualifier.includes('üst') || priceQualifier.includes('üzer') || 
+                 priceQualifier.includes('fazla')) {
+        minPrice = priceValue;
+      }
+    }
+    
+    // Extract color from query
+    const colorMap = {
+      'beyaz': ['beyaz', 'white', 'wht', 'wsl'],
+      'siyah': ['siyah', 'black', 'blk', 'bbk'],
+      'kirmizi': ['kirmizi', 'kırmızı', 'red'],
+      'mavi': ['mavi', 'blue', 'blu'],
+      'yesil': ['yesil', 'yeşil', 'green'],
+      'gri': ['gri', 'gray', 'grey'],
+      'sari': ['sari', 'sarı', 'yellow'],
+      'pembe': ['pembe', 'pink'],
+      'turuncu': ['turuncu', 'orange'],
+      'mor': ['mor', 'purple'],
+    };
+    
+    let searchedColor: string | null = null;
+    let searchedColorVariants: string[] = [];
+    
+    for (const [colorKey, variants] of Object.entries(colorMap)) {
+      for (const variant of variants) {
+        if (normalizedQuery.includes(variant)) {
+          searchedColor = colorKey;
+          searchedColorVariants = variants;
+          break;
+        }
+      }
+      if (searchedColor) break;
+    }
+    
+    // Include shorter keywords (for size numbers like 43)
+    const keywords = normalizedQuery.split(/\s+/).filter((w) => w.length > 1);
+    
+    // Category synonyms - expand keywords with common synonyms
+    const categorySynonyms: { [key: string]: string[] } = {
+      'canta': ['canta', 'bag', 'backpack', 'sirt cantasi', 'omuz cantasi'],
+      'bag': ['canta', 'bag', 'backpack'],
+      'backpack': ['canta', 'bag', 'backpack', 'sirt cantasi'],
+      'bot': ['bot', 'boot', 'cizme'],
+      'boot': ['bot', 'boot', 'cizme'],
+      'cizme': ['bot', 'boot', 'cizme'],
+      'terlik': ['terlik', 'sandal', 'sandalet', 'slipper'],
+      'sandal': ['terlik', 'sandal', 'sandalet', 'slipper'],
+      'sneaker': ['sneaker', 'spor ayakkabi', 'ayakkabi'],
+      'corap': ['corap', 'sock', 'socks'],
+    };
+    
+    // Expand keywords with synonyms
+    const expandedKeywords = new Set<string>();
+    const originalKeywords = new Set(keywords);
+    keywords.forEach(keyword => {
+      expandedKeywords.add(keyword);
+      if (categorySynonyms[keyword]) {
+        categorySynonyms[keyword].forEach(syn => expandedKeywords.add(syn));
+      }
+    });
+    const allKeywords = Array.from(expandedKeywords);
 
-    const intents = {
-      sports: /koşu|spor|running|athletic|sport|training|gym|fitness/i.test(query),
-      casual: /günlük|casual|rahat|lifestyle|comfort/i.test(query),
+    // Only keep broad demographic filters
+    const demographics = {
       kids: /çocuk|kids|child|bebek|baby/i.test(query),
       men: /erkek|men|adam|bay/i.test(query),
       women: /kadın|women|bayan/i.test(query),
-      price: /ucuz|uygun|pahalı|fiyat|price|cheap|expensive/i.test(query),
     };
 
-    // Filter: only in stock products with product_type
+    // Filter: in stock products + price range only
     const eligibleProducts = products.filter((p) => {
+      // Check availability
       const availability = p.availability?.toLowerCase() || '';
-      const isInStock = availability.includes('in stock') || availability.includes('stokta');
-      const hasProductType = p.productType && p.productType.trim().length > 0;
-      return isInStock && hasProductType;
+      const isInStock = availability.includes('in stock') || availability.includes('stokta') || !p.availability;
+      if (!isInStock) return false;
+      
+      // Check price range
+      if (maxPrice || minPrice) {
+        const productPrice = this.extractPrice(p.salePrice || p.price);
+        if (productPrice) {
+          if (maxPrice && productPrice > maxPrice) return false;
+          if (minPrice && productPrice < minPrice) return false;
+        }
+      }
+      
+      return true;
     });
 
     const scored = eligibleProducts.map((product) => {
@@ -90,56 +487,171 @@ export class AIService {
       const productText = normalizeText(`${product.title} ${product.description} ${product.productType || ''} ${product.googleProductCategory || ''}`);
       const productTitle = normalizeText(product.title);
       
+      // Check size match (high priority)
+      if (searchedSize && product.size) {
+        const productSize = product.size.toString().trim();
+        if (productSize === searchedSize || productSize.includes(searchedSize)) {
+          score += 30; // High score for exact size match
+        }
+      }
+      
+      // Check color match (very high priority)
+      if (searchedColor && product.color) {
+        const productColorNorm = normalizeText(product.color);
+        let colorMatch = false;
+        let colorMismatch = false;
+        
+        // Check if product color matches searched color
+        for (const variant of searchedColorVariants) {
+          if (productColorNorm.includes(variant)) {
+            score += 35; // Very high score for color match
+            colorMatch = true;
+            break;
+          }
+        }
+        
+        // Penalty for wrong color (check against other colors)
+        if (!colorMatch) {
+          for (const [otherColorKey, otherVariants] of Object.entries(colorMap)) {
+            if (otherColorKey !== searchedColor) {
+              for (const variant of otherVariants) {
+                if (productColorNorm.includes(variant)) {
+                  score -= 20; // Penalty for wrong color
+                  colorMismatch = true;
+                  break;
+                }
+              }
+              if (colorMismatch) break;
+            }
+          }
+        }
+      }
+      
       keywords.forEach((keyword) => {
-        if (productTitle.includes(keyword)) score += 10;
+        // Skip color keywords as we handle them separately
+        const isColorKeyword = searchedColorVariants.includes(keyword);
+        if (!isColorKeyword) {
+          // High priority: keyword in title
+          if (productTitle.includes(keyword)) score += 15;
+          
+          // Very high priority: keyword in product category/type
+          const productType = normalizeText(product.productType || '');
+          if (productType.includes(keyword)) score += 20;
+          
+          // Medium priority: keyword in description or other text
+          if (productText.includes(keyword)) score += 5;
+          
+          // Lower priority: brand match
+          if (product.brand && normalizeText(product.brand).includes(keyword)) score += 3;
+        }
+      });
+      
+      // Check expanded keywords (synonyms) for better category matching
+      allKeywords.forEach((keyword) => {
+        if (originalKeywords.has(keyword)) return; // Skip already processed original keywords
+        
+        const productType = normalizeText(product.productType || '');
+        // Synonym match in category is very important - same as original keyword
+        if (productType.includes(keyword)) score += 20;
+        // Synonym match in title is also high priority
+        if (productTitle.includes(keyword)) score += 15;
+        // Synonym in description
         if (productText.includes(keyword)) score += 5;
-        if (product.brand && normalizeText(product.brand).includes(keyword)) score += 3;
       });
 
-      if (intents.sports && /spor|sport|running|athletic|koşu/i.test(productText)) score += 15;
-      if (intents.casual && /günlük|casual|rahat|lifestyle/i.test(productText)) score += 15;
-      if (intents.kids && /çocuk|kids|child/i.test(productText)) score += 20;
-      if (intents.men && /erkek|men|adam/i.test(productText)) score += 10;
-      if (intents.women && /kadın|women|bayan/i.test(productText)) score += 10;
+      // Demographics scoring (only broad categories)
+      if (demographics.kids && /çocuk|kids|child/i.test(productText)) score += 20;
+      if (demographics.men && /erkek|men|adam/i.test(productText)) score += 10;
+      if (demographics.women && /kadın|women|bayan/i.test(productText)) score += 10;
 
       if (product.brand?.toLowerCase() === 'skechers') score += 2;
 
       return { product, score };
     });
 
-    // Sort by score and diversify
+    // Sort by score
     const sorted = scored
       .filter((s) => s.score > 0)
       .sort((a, b) => b.score - a.score);
 
-    // Select diverse products (different categories/brands)
-    const diverse: Product[] = [];
-    const usedCategories = new Set<string>();
-    const usedBrands = new Set<string>();
-
+    // Deduplicate products based on what user specified
+    let deduplicated = sorted;
+    const seenKeys = new Set<string>();
+    deduplicated = [];
+    
     for (const item of sorted) {
-      if (diverse.length >= 10) break;
+      let dedupeKey: string;
       
-      const category = item.product.productType || '';
-      const brand = item.product.brand || '';
-      
-      // For first 3 products, ensure diversity
-      if (diverse.length < 3) {
-        if (!usedCategories.has(category) || !usedBrands.has(brand)) {
-          diverse.push(item.product);
-          usedCategories.add(category);
-          usedBrands.add(brand);
-          continue;
-        }
+      // Build deduplication key based on what user DID NOT specify
+      if (!searchedColor && !searchedSize) {
+        // No color or size specified -> dedupe by model only (ignore both color and size)
+        dedupeKey = item.product.title
+          .replace(/\s+(BLK|WHT|BLU|RED|GRY|BBK|WSL|NVY|PNK|GRN|YLW|ORG|PRP|MLT|BKMT|CCMT|CHAR|GYBK|GYMT|NVHP|NVRD|OFBK|OFMT|TAN|TPE|DKTP|OLBK|GYBL|NVBL|NVLM|NVGR|NVPK|TPBK|OFWT|NVCC|TPMT|BKFS|BKRG|CHBK|GYAQ|NVAQ|TPAQ|WBK|WMLT|WNVY|WTPK)\s*$/i, '')
+          .replace(/\s+\d{1,2}(\.\d)?$/i, '')
+          .trim();
+      } else if (searchedColor && !searchedSize) {
+        // Color specified but not size -> dedupe by model+color (same model+color, different sizes = duplicate)
+        dedupeKey = `${item.product.title.replace(/\s+\d{1,2}(\.\d)?$/i, '').trim()}_${item.product.color || ''}`;
+      } else if (!searchedColor && searchedSize) {
+        // Size specified but not color -> dedupe by model+size (same model+size, different colors = duplicate)
+        dedupeKey = `${item.product.title.replace(/\s+(BLK|WHT|BLU|RED|GRY|BBK|WSL|NVY|PNK|GRN|YLW|ORG|PRP|MLT|BKMT|CCMT|CHAR|GYBK|GYMT|NVHP|NVRD|OFBK|OFMT|TAN|TPE|DKTP|OLBK|GYBL|NVBL|NVLM|NVGR|NVPK|TPBK|OFWT|NVCC|TPMT|BKFS|BKRG|CHBK|GYAQ|NVAQ|TPAQ|WBK|WMLT|WNVY|WTPK)\s*$/i, '').trim()}_${item.product.size || ''}`;
+      } else {
+        // Both color and size specified -> no deduplication, show all exact matches
+        dedupeKey = item.product.id + '_' + (item.product.color || '') + '_' + (item.product.size || '');
       }
       
-      // After first 3, allow duplicates
-      if (diverse.length >= 3) {
-        diverse.push(item.product);
+      if (!seenKeys.has(dedupeKey)) {
+        seenKeys.add(dedupeKey);
+        deduplicated.push(item);
       }
     }
 
-    return diverse;
+    // Take top scoring products first (no diversification for highly relevant results)
+    // If we have many products with similar high scores, then diversify
+    const topScore = deduplicated[0]?.score || 0;
+    const highScoreThreshold = topScore * 0.7; // Products with 70%+ of top score
+    
+    const highScoreProducts = deduplicated.filter(s => s.score >= highScoreThreshold);
+    const lowerScoreProducts = deduplicated.filter(s => s.score < highScoreThreshold);
+    
+    // For high-score products: prioritize relevance, minimal diversification
+    const results: Product[] = [];
+    const usedCategories = new Set<string>();
+    
+    // Adaptive minimum score threshold
+    // If top score is high, require meaningful relevance
+    // If top score is low, be more lenient
+    const minRelevanceScore = topScore > 30 ? 10 : 5;
+    
+    // Add high-scoring products (max 6)
+    for (const item of highScoreProducts) {
+      if (results.length >= 6) break;
+      if (item.score < minRelevanceScore) continue; // Skip low-relevance products
+      results.push(item.product);
+      const category = item.product.productType || '';
+      usedCategories.add(category);
+    }
+    
+    // If we need more products, add diverse lower-scored ones (max 4 more)
+    for (const item of lowerScoreProducts) {
+      if (results.length >= 10) break;
+      if (item.score < minRelevanceScore) continue; // Skip low-relevance products
+      
+      const category = item.product.productType || '';
+      
+      // Only add if different category for diversity
+      if (!usedCategories.has(category)) {
+        results.push(item.product);
+        usedCategories.add(category);
+      }
+    }
+    
+    // Fallback: if no products found with score threshold, return top 3 products anyway
+    if (results.length === 0 && deduplicated.length > 0) {
+      return deduplicated.slice(0, 3).map(item => item.product);
+    }
+
+    return results;
   }
 
   private buildMessages(
@@ -148,58 +660,67 @@ export class AIService {
     products: Product[],
     siteId: string
   ): any[] {
-    const topProducts = products.slice(0, 5);
+    const topProducts = products.slice(0, 6); // Reduced from 8 to 6 for token efficiency
     
-    const systemPrompt = `Sen ${siteId} sitesinin profesyonel alışveriş danışmanısın. Müşterilere en uygun ürünleri öneriyorsun.
-
-ÖNEMLİ KURALLAR:
-1. Sadece aşağıdaki ürünlerden öner
-2. Her öneride ürün adını belirt
-3. Fiyatı mutlaka söyle
-4. Müşteriye neden bu ürünü önerdiğini kısaca açıkla
-5. Samimi ve profesyonel ol
-6. 2-3 cümlede özetle
-
-MEVCUT ÜRÜNLER:
-${topProducts.map((p, i) => {
-      let priceText = '';
-      if (p.salePrice) {
-        const discount = this.calculateDiscount(p.price, p.salePrice);
-        if (discount.hasDiscount) {
-          priceText = `İndirimli Fiyat: ${discount.newPrice} (Eski Fiyat: ${discount.oldPrice}, %${discount.discountPercent} İNDİRİM!)`;
-        } else {
-          priceText = `Fiyat: ${this.parsePrice(p.salePrice)}`;
-        }
-      } else {
-        priceText = `Fiyat: ${this.parsePrice(p.price)}`;
-      }
+    // Extract requested size from user message
+    const sizeMatch = userMessage.match(/\b(\d{1,2}(?:\.\d)?)\s*(?:numara|beden|size)?\b/i);
+    const requestedSize = sizeMatch ? sizeMatch[1] : null;
+    
+    // Extract category keywords
+    const categoryMatch = /sneker|sneaker|ayakkab[ıi]|bot|terlik|[çc]orap|[çc]anta/i.exec(userMessage);
+    const requestedCategory = categoryMatch ? categoryMatch[0] : null;
+    
+    // Check if we have exact size match or nearby sizes
+    let sizeNote = '';
+    if (requestedSize) {
+      const hasExactSize = topProducts.some(p => {
+        const productSize = String(p.size || '').trim();
+        const querySizeNum = parseFloat(requestedSize);
+        const productSizeNum = parseFloat(productSize);
+        return productSize === requestedSize || 
+               (!isNaN(productSizeNum) && !isNaN(querySizeNum) && productSizeNum === querySizeNum);
+      });
       
-      const specs = [];
-      if (p.color) specs.push(`Renk: ${p.color}`);
-      if (p.size) specs.push(`Beden: ${p.size}`);
-      const specsText = specs.length > 0 ? `\n   Özellikler: ${specs.join(', ')}` : '';
-      return `${i + 1}. "${p.title}"
-   Kategori: ${p.productType}
-   ${priceText}
-   Marka: ${p.brand || 'Belirtilmemiş'}${specsText}`;
-    }).join('\n\n')}
+      if (hasExactSize) {
+        sizeNote = `\n\nÖNEMLİ: Müşteri ${requestedSize} numara istiyor. Önce ${requestedSize} numaralı ürünleri öner!`;
+      } else {
+        // Nearby sizes available
+        sizeNote = `\n\nÖNEMLİ: Müşteri ${requestedSize} numara istiyor ama tam bu bedende stok yok. Yakın bedenleri (${parseFloat(requestedSize) - 1}, ${parseFloat(requestedSize) + 1}) öner ve "istediğiniz beden stokta yok ama yakın bedenler mevcut" diye belirt.`;
+      }
+    }
+    
+    const categoryNote = requestedCategory
+      ? `\nMüşteri "${requestedCategory}" arıyor. Sadece bu kategoriye uygun ürünleri öner. Örneğin sneaker isteyen müşteriye çorap önerme!`
+      : '';
+    
+    const systemPrompt = `${siteId} alışveriş danışmanısın. Sadece listelenen ürünleri öner.
 
-ÖRNEK YANIT ŞABLONU:
-"Size [ürün adı] önerebilirim, [fiyat] [indirim varsa: şu an %X indirimde!]. [Renk/beden bilgisi varsa belirt]. Bu ürün [özellik/neden]. Ayrıca [alternatif ürün] de harika bir seçenek."
+KURALLAR:
+1. Ürün adı + fiyat + özellik belirt
+2. İndirim varsa söyle
+3. Kısa ve öz yanıt (2-3 cümle)
+4. Müşterinin aradığına çok benzemeyen ürünleri önerme
+5. Kategori uyumsuzluğu varsa o ürünü önerme (örn: sneaker isteyen müşteriye çorap önerme)
+6. İstenen beden yoksa yakın bedenleri öner ve açıkla (örn: "43 numara stokta yok ama 42 ve 44 mevcut")
+7. Aradığı ürün hiç yoksa "Bu kategoride ürünümüz yok, alternatif ürünlere bakabilirsiniz" de${sizeNote}${categoryNote}
 
-KESİNLİKLE YAPMA:
-- Listede olmayan ürün önerme
-- Genel açıklamalar yapma
-- Uzun uzun anlatma
-- Fiyatı atlama
-- İndirimi atlama (varsa mutlaka belirt)
-- Renk ve beden bilgisini atla`;
+ÜRÜNLER:
+${topProducts.map((p, i) => {
+      const discount = p.salePrice ? this.calculateDiscount(p.price, p.salePrice) : null;
+      const price = discount?.hasDiscount 
+        ? `${discount.newPrice} (%${discount.discountPercent} İNDİRİM, eski: ${discount.oldPrice})`
+        : this.parsePrice(p.salePrice || p.price);
+      
+      const specs = [p.color, p.size].filter(Boolean).join(', ');
+      return `${i + 1}. ${p.title} | ${price} | ${p.brand || '-'}${specs ? ' | ' + specs : ''}`;
+    }).join('\n')}`;
 
     const messages: any[] = [
       { role: 'system', content: systemPrompt },
     ];
 
-    const recentHistory = history.slice(-5);
+    // Reduced history from 5 to 3 for token efficiency
+    const recentHistory = history.slice(-3);
     recentHistory.forEach((msg) => {
       messages.push({
         role: msg.role,
@@ -224,6 +745,14 @@ KESİNLİKLE YAPMA:
     return priceStr;
   }
 
+  private extractPrice(priceStr: string): number | null {
+    const match = priceStr.match(/[\d.,]+/);
+    if (match) {
+      return parseFloat(match[0].replace(',', '.'));
+    }
+    return null;
+  }
+
   private calculateDiscount(price: string, salePrice: string): { hasDiscount: boolean; discountPercent: number; oldPrice: string; newPrice: string } {
     const priceMatch = price.match(/[\d.,]+/);
     const salePriceMatch = salePrice.match(/[\d.,]+/);
@@ -246,5 +775,258 @@ KESİNLİKLE YAPMA:
     }
     
     return { hasDiscount: false, discountPercent: 0, oldPrice: this.parsePrice(price), newPrice: this.parsePrice(price) };
+  }
+
+  /**
+   * Build search query with conversation context
+   * Handles follow-up questions like "erkek için var mı" by including previous context
+   */
+  private buildSearchQuery(currentMessage: string, history: ChatMessage[]): string {
+    const normalized = currentMessage.toLowerCase().trim();
+    
+    // Check if current message is context-dependent (short follow-up question)
+    const isFollowUpQuestion = 
+      // Generic continuation requests
+      /(başka|daha\s*(fazla|çok)|more|diğer|other).*(ürün|product|var|göster|show)/i.test(normalized) ||
+      /(bunlar(dan)?\s*başka|bunun\s*dışında)/i.test(normalized) ||
+      /^(başka\s*(ne|hangi|neler)|daha\s*(ne|neler))/i.test(normalized) ||
+      // Questions about variations
+      /^(erkek|kadin|kız|unisex|beyaz|siyah|kırmızı|mavi).*(var\s*m[ıi]|olur\s*mu|bulunur\s*mu)/i.test(normalized) ||
+      // Short modifications
+      /^(erkek|kadin|kız|unisex|beyaz|siyah|kırmızı|mavi).*(için|olsun|istiyorum)/i.test(normalized) ||
+      // Question words without product type
+      (/(var\s*m[ıi]|olur\s*mu|bulunur\s*mu)/i.test(normalized) && normalized.split(/\s+/).length <= 5);
+    
+    if (!isFollowUpQuestion || history.length === 0) {
+      // Standalone question or no history - use as is
+      return currentMessage;
+    }
+    
+    // Find last user message with product context
+    let lastUserContext = '';
+    for (let i = history.length - 1; i >= 0; i--) {
+      if (history[i].role === 'user') {
+        const userMsg = history[i].content.toLowerCase();
+        // Check if it contains product context (size, category, features)
+        const hasSize = /\d{1,2}(?:\.\d)?\s*(numara|beden|size)/i.test(userMsg);
+        const hasCategory = /(ayakkab[ıi]|bot|sneaker|terlik|[çc]orap|[çc]anta|bag|backpack|yelek|vest|mont|jacket)/i.test(userMsg);
+        const hasFeature = /(spor|ışıklı|su\s*ge[çc]irmez|hafif|rahat|outdoor|indoor|running)/i.test(userMsg);
+        
+        if (hasSize || hasCategory || hasFeature) {
+          lastUserContext = history[i].content;
+          break;
+        }
+      }
+    }
+    
+    if (!lastUserContext) {
+      // No relevant context found - but for generic "başka ürünler var" questions,
+      // try to use the last user message anyway
+      const lastUser = history.filter(m => m.role === 'user').pop();
+      if (lastUser && /(başka|daha\s*fazla|more)/i.test(normalized)) {
+        lastUserContext = lastUser.content;
+      }
+      
+      if (!lastUserContext) {
+        return currentMessage;
+      }
+    }
+    
+    // Extract key attributes from previous context
+    const sizeMatch = lastUserContext.match(/(\d{1,2}(?:\.\d)?)\s*(?:numara|beden|size)?/i);
+    const categoryMatch = lastUserContext.match(/(ayakkab[ıi]|bot|sneaker|terlik|[çc]orap|[çc]anta|bag|backpack|yelek|vest|mont|jacket)/i);
+    const featureMatch = lastUserContext.match(/(spor|ışıklı|su\s*ge[çc]irmez|hafif|rahat|outdoor|indoor|running)/i);
+    const childMatch = lastUserContext.match(/(bebek|[çc]ocuk)/i);
+    
+    // Build enhanced query
+    const contextParts: string[] = [];
+    
+    if (sizeMatch) contextParts.push(`${sizeMatch[1]} numara`);
+    if (childMatch) contextParts.push(childMatch[1]);
+    if (categoryMatch) contextParts.push(categoryMatch[1]);
+    if (featureMatch) contextParts.push(featureMatch[1]);
+    
+    // For generic continuation requests ("başka ürünler var"), 
+    // use ONLY the context, don't append the request itself
+    if (/(başka|daha\s*fazla|more).*(ürün|product)/i.test(normalized)) {
+      console.log(`[AIService] Generic continuation detected, using context only: ${contextParts.join(' ')}`);
+      return contextParts.length > 0 ? contextParts.join(' ') : lastUserContext;
+    }
+    
+    // Combine with current message (which usually modifies gender/color)
+    const enhancedQuery = `${contextParts.join(' ')} ${currentMessage}`;
+    
+    return enhancedQuery;
+  }
+
+  /**
+   * Build cache key from query and conversation history
+   * Only considers last 2 user messages for context (keeps cache keys simpler)
+   */
+  private buildCacheKey(message: string, history: ChatMessage[]): string {
+    const normalized = message.toLowerCase().trim();
+    
+    // Include last 2 user messages for context
+    const recentContext = history
+      .filter(m => m.role === 'user')
+      .slice(-2)
+      .map(m => m.content.toLowerCase().trim())
+      .join('|');
+    
+    return recentContext ? `${recentContext}::${normalized}` : normalized;
+  }
+
+  /**
+   * Check if query is irrelevant to product search
+   * Returns a friendly response if query is irrelevant, null otherwise
+   */
+  private checkIrrelevantQuery(message: string, siteId: string): ChatResponse | null {
+    const normalized = message.toLowerCase().trim();
+    
+    // GUARD CLAUSE: Very simple check for weather queries
+    if (normalized.includes('hava') || normalized.includes('weather') || 
+        normalized.includes('derece') || normalized.includes('degree')) {
+      console.log(`[AIService] GUARD: Weather query detected`);
+      return this.generateIrrelevantResponse('hava', siteId);
+    }
+    
+    // GUARD CLAUSE: Store location queries
+    if ((normalized.includes('mağaza') || normalized.includes('magaza') || normalized.includes('store') || 
+         normalized.includes('şube') || normalized.includes('sube')) && 
+        (normalized.includes('nerede') || normalized.includes('istanbul') || normalized.includes('ankara') || 
+         normalized.includes('where') || normalized.includes('hangi'))) {
+      console.log(`[AIService] GUARD: Store location query detected`);
+      return this.generateIrrelevantResponse('magaza', siteId);
+    }
+    
+    // Normalize Turkish characters for better matching
+    const normalizeText = (text: string) => 
+      text.toLowerCase()
+        .replace(/ğ/g, 'g')
+        .replace(/ü/g, 'u')
+        .replace(/ş/g, 's')
+        .replace(/ı/g, 'i')
+        .replace(/ö/g, 'o')
+        .replace(/ç/g, 'c');
+    
+    const normalizedQuery = normalizeText(normalized);
+    console.log(`[AIService] Checking irrelevant query: "${message}" -> normalized: "${normalizedQuery}"`);
+    
+    // Quick check for common irrelevant queries
+    const quickChecks = [
+      { pattern: /hava/, type: 'hava' },
+      { pattern: /weather/, type: 'hava' },
+      { pattern: /(magaza|store|sube).*(nerede|istanbulda|ankarada)/, type: 'magaza' },
+      { pattern: /nerede.*(bulabilirim|magaza)/, type: 'magaza' },
+    ];
+    
+    for (const check of quickChecks) {
+      if (check.pattern.test(normalizedQuery)) {
+        console.log(`[AIService] ✓ Quick check matched: ${check.pattern}`);
+        return this.generateIrrelevantResponse(check.type, siteId);
+      }
+    }
+    
+    // Patterns for irrelevant queries (using normalized text without Turkish chars)
+    // Note: Avoid \b word boundaries as they don't work well with normalized text
+    const irrelevantPatterns = [
+      // Weather queries - expanded patterns
+      /(hava|weather).*(nasil|ne|kac|how|what)/i,
+      /(bugun|yarin|bu\s*hafta|tomorrow|today).*(hava|weather)/i,
+      /(hava|weather).*(derece|sicaklik|temperature|yagmur|kar|rain|snow)/i,
+      /(derece|degree|sicaklik|temperature)/i,
+      
+      // Store location queries
+      /(magaza|store|shop|sube|branch).*(nerede|where|hangi|which|konum|location|adres|address)/i,
+      /(hangi\s+)?\s*(magaza|sube|branch)\s+(var|mevcut|bulunur)/i,
+      /(istanbul|ankara|izmir|bursa).*(magaza|sube|branch)/i,
+      /nerede\s+(bulabilirim|bulunur|var)/i,
+      
+      // General questions unrelated to products
+      /(saat\s+kac|what\s+time|zaman|when)/i,
+      /(nasilsin|how\s+are\s+you|merhaba|hello|selam|hi)\s*[?!]*$/i,
+      /(kimsin|kim\s+sin|who\s+are\s+you)/i,
+      /(ne\s+yapiyorsun|what\s+are\s+you\s+doing)/i,
+      
+      // News and current events
+      /(haber|news|olay|event|gundem|dunya|world)/i,
+      
+      // Sports scores
+      /(mac|match|skor|score|takim|team|futbol|football|basketbol|basketball).*(sonuc|result|kazandi|kaybetti)/i,
+      
+      // Technical support unrelated to products
+      /(sifre|password|hesap|account|giris|login|kayit|register).*(unuttum|forgot|nasil|how)/i,
+      /(nasil\s+)?(kayit|uye|register|sign\s+up)/i,
+    ];
+    
+    // Check if query matches any irrelevant pattern
+    for (const pattern of irrelevantPatterns) {
+      if (pattern.test(normalizedQuery)) {
+        console.log(`[AIService] ✓ Irrelevant query matched pattern: ${pattern}`);
+        // Determine query type for personalized response
+        let queryType = 'genel';
+        if (/hava|weather|derece|yagmur|kar|sicaklik/.test(normalizedQuery)) {
+          queryType = 'hava';
+        } else if (/magaza|store|nerede|konum|location|adres|sube/.test(normalizedQuery)) {
+          queryType = 'magaza';
+        } else if (/sifre|hesap|giris|kayit|login/.test(normalizedQuery)) {
+          queryType = 'hesap';
+        }
+        
+        return this.generateIrrelevantResponse(queryType, siteId);
+      }
+    }
+    
+    console.log(`[AIService] ✗ Query not detected as irrelevant, proceeding with product search`);
+    
+    // Check for very short generic messages (likely greetings or off-topic)
+    if (normalized.length < 15 && !/\b(ayakkabi|bot|terlik|corap|canta|sneaker|giyim|urun|beden|numara)\b/i.test(normalizedQuery)) {
+      // Could be a greeting or off-topic
+      if (/\b(merhaba|selam|hello|hi|hey|tamam|ok|tesekkur|thanks|sagol)\b/i.test(normalizedQuery)) {
+        return this.generateIrrelevantResponse('greeting', siteId);
+      }
+    }
+    
+    return null; // Query is relevant
+  }
+
+  /**
+   * Generate friendly response for irrelevant queries
+   */
+  private generateIrrelevantResponse(queryType: string, siteId: string): ChatResponse {
+    const brandName = siteId.charAt(0).toUpperCase() + siteId.slice(1);
+    
+    let message = '';
+    
+    switch (queryType) {
+      case 'hava':
+        message = `Merhaba! 😊\n\nBen ${brandName} alışveriş danışmanıyım ve sadece ürünler, beden önerileri ve alışveriş konularında yardımcı olabiliyorum. Hava durumu hakkında bilgi veremiyorum.\n\nAncak bugünkü hava için doğru kıyafet seçimine yardımcı olabilirim! Mevsime uygun bir ayakkabı, bot veya başka bir ürün mü arıyorsunuz? Size nasıl yardımcı olabilirim?`;
+        break;
+      
+      case 'magaza':
+        message = `Merhaba! 😊\n\nBen ${brandName} ürün danışmanıyım. Mağaza konumları ve şube bilgileri için web sitemizin "Mağazalarımız" veya "İletişim" sayfasını ziyaret edebilirsiniz.\n\nAncak size online alışverişinizde yardımcı olabilirim! Hangi ürünü arıyorsunuz? Beden, renk veya model konusunda size yardımcı olabilirim.`;
+        break;
+      
+      case 'hesap':
+        message = `Merhaba! 😊\n\nHesap işlemleri ve giriş sorunları için müşteri hizmetlerimizle iletişime geçmenizi öneririm. Ben sadece ürün arama ve öneri konusunda yardımcı olabilirim.\n\nÜrün araması, beden önerisi veya model karşılaştırması gibi konularda size yardımcı olmaktan mutluluk duyarım!`;
+        break;
+      
+      case 'greeting':
+        message = `Merhaba! 😊\n\nBen ${brandName} alışveriş asistanıyım. Size ürün önerileri sunabilir, beden ve renk seçiminde yardımcı olabilirim.\n\nNe tür bir ürün arıyorsunuz? Ayakkabı, bot, terlik veya başka bir şey?`;
+        break;
+      
+      default:
+        message = `Merhaba! 😊\n\nBen ${brandName} alışveriş danışmanıyım ve size ürünlerimiz, beden önerileri ve alışveriş konularında yardımcı olabilirim.\n\nHangi ürünü arıyorsunuz? Size nasıl yardımcı olabilirim?`;
+    }
+    
+    return {
+      message,
+      debug: {
+        originalQuery: '',
+        enhancedQuery: '',
+        isFollowUp: false,
+        queryType: 'irrelevant',
+      },
+    };
   }
 }

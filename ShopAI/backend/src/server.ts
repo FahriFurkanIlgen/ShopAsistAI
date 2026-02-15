@@ -5,6 +5,8 @@ import cron from 'node-cron';
 import chatRouter from './routes/chat';
 import productsRouter from './routes/products';
 import configRouter from './routes/config';
+import searchRouter from './routes/search';
+import merchandisingRouter from './routes/merchandising';
 import { FeedParserService } from './services/feedParser';
 import { CacheService } from './services/cacheService';
 
@@ -20,8 +22,32 @@ const feedParserService = new FeedParserService(cacheService);
 
 // Middleware
 app.use(cors({
-  origin: process.env.ALLOWED_ORIGINS?.split(',') || '*',
+  origin: (origin, callback) => {
+    // Always allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) {
+      callback(null, true);
+      return;
+    }
+    
+    // In development, allow all origins
+    if (process.env.NODE_ENV !== 'production') {
+      callback(null, true);
+      return;
+    }
+    
+    // In production, check allowed origins
+    const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',').map(o => o.trim()) || ['*'];
+    if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  exposedHeaders: ['Content-Length', 'Content-Type'],
+  maxAge: 86400, // 24 hours
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -36,6 +62,8 @@ app.use((req: Request, _res: Response, next) => {
 app.use('/api/chat', chatRouter);
 app.use('/api/products', productsRouter);
 app.use('/api/config', configRouter);
+app.use('/api/search', searchRouter);
+app.use('/api/merchandising', merchandisingRouter);
 
 // Health check
 app.get('/health', (_req: Request, res: Response) => {

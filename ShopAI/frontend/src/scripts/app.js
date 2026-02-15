@@ -9,6 +9,8 @@ class ChatWidget {
     this.isLoading = false;
     this.config = null;
     this.selectedCategory = null;
+    this.hasShownWelcome = false; // Track if welcome message shown
+    this.userScrolledUp = false; // Track if user manually scrolled up
     
     this.initElements();
     this.attachEventListeners();
@@ -153,7 +155,7 @@ class ChatWidget {
       const data = await response.json();
 
       if (data.products && data.products.length > 0) {
-        this.displayProducts(data.products);
+        this.addProductMessage(data.products, `${this.selectedCategory.name} kategorisinde sizin için seçtiklerim:`);
         
         // Hide welcome section after category selection
         if (this.conversationHistory.length === 0) {
@@ -175,6 +177,22 @@ class ChatWidget {
         this.sendMessage();
       }
     });
+    
+    // Track user scroll behavior
+    this.chatMessages.addEventListener('scroll', () => {
+      this.checkScrollPosition();
+    });
+  }
+  
+  checkScrollPosition() {
+    const container = this.chatMessages;
+    const threshold = 50; // 50px tolerance
+    
+    // Check if user is near bottom
+    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
+    
+    // Update flag: true if user scrolled up (not at bottom)
+    this.userScrolledUp = !isNearBottom;
   }
 
   toggleChat() {
@@ -183,6 +201,19 @@ class ChatWidget {
     
     if (this.isOpen) {
       this.chatInput.focus();
+      
+      // Show welcome message on first open (2 seconds after)
+      if (!this.hasShownWelcome && this.conversationHistory.length === 0) {
+        setTimeout(() => {
+          if (this.conversationHistory.length === 0 && this.isOpen) {
+            const welcomeText = this.config?.siteName 
+              ? `Merhaba, hoş geldiniz! 👋 Ben ${this.config.siteName} yapay zeka asistanınızım. Size nasıl yardımcı olabilirim?`
+              : 'Merhaba, hoş geldiniz! 👋 Ben yapay zeka asistanınızım. Size nasıl yardımcı olabilirim?';
+            this.addMessage('assistant', welcomeText);
+            this.hasShownWelcome = true;
+          }
+        }, 2000);
+      }
     }
   }
 
@@ -209,16 +240,36 @@ class ChatWidget {
     
     this.chatMessages.appendChild(messageDiv);
     
-    // Scroll to bottom with smooth behavior
-    setTimeout(() => {
-      this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
-    }, 50);
+    // Auto-scroll only if user hasn't manually scrolled up
+    this.scrollToBottomIfNeeded();
     
     // Add to history
     this.conversationHistory.push({
       role: role === 'user' ? 'user' : 'assistant',
       content,
       timestamp: new Date(),
+    });
+  }
+
+  scrollToBottomIfNeeded() {
+    // Always scroll if user is typing (sending message) or if they're at bottom
+    if (!this.userScrolledUp) {
+      this.scrollToBottom();
+    }
+  }
+
+  scrollToBottom() {
+    // Use requestAnimationFrame for smoother scroll
+    requestAnimationFrame(() => {
+      this.chatMessages.scrollTo({
+        top: this.chatMessages.scrollHeight,
+        behavior: 'smooth'
+      });
+      
+      // After smooth scroll completes, reset the userScrolledUp flag
+      setTimeout(() => {
+        this.userScrolledUp = false;
+      }, 500);
     });
   }
 
@@ -234,7 +285,7 @@ class ChatWidget {
       </div>
     `;
     this.chatMessages.appendChild(loadingDiv);
-    this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
+    this.scrollToBottomIfNeeded();
   }
 
   removeLoading() {
@@ -244,13 +295,24 @@ class ChatWidget {
     }
   }
 
-  displayProducts(products) {
+  addProductMessage(products, text = 'Sizin için önerdiğim ürünler:') {
     if (!products || products.length === 0) {
-      this.productSuggestions.innerHTML = '';
       return;
     }
 
-    this.productSuggestions.innerHTML = products.map(product => {
+    // Create assistant message with products
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'message assistant';
+    
+    // Add intro text
+    const introP = document.createElement('p');
+    introP.textContent = text;
+    messageDiv.appendChild(introP);
+    
+    // Add products container
+    const productsContainer = document.createElement('div');
+    productsContainer.className = 'products-in-message';
+    productsContainer.innerHTML = products.map(product => {
       const specs = [];
       if (product.color) specs.push(product.color);
       if (product.size) specs.push(`Beden: ${product.size}`);
@@ -289,10 +351,18 @@ class ChatWidget {
     `;
     }).join('');
     
-    // Scroll to bottom after displaying products
+    messageDiv.appendChild(productsContainer);
+    this.chatMessages.appendChild(messageDiv);
+    
+    // Scroll to bottom after displaying products (only if user hasn't scrolled up)
     setTimeout(() => {
-      this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
-    }, 100);
+      this.scrollToBottomIfNeeded();
+    }, 150);
+  }
+
+  displayProducts(products) {
+    // Legacy method - redirects to addProductMessage
+    this.addProductMessage(products);
   }
 
   extractPrice(priceStr) {
@@ -307,6 +377,9 @@ class ChatWidget {
     const message = this.chatInput.value.trim();
     
     if (!message || this.isLoading) return;
+    
+    // User is actively sending message, so they want to be at bottom
+    this.userScrolledUp = false;
     
     // Add user message
     this.addMessage('user', message);
@@ -342,11 +415,9 @@ class ChatWidget {
       // Add AI response
       this.addMessage('assistant', data.message);
       
-      // Display recommended products
+      // Display recommended products in chat
       if (data.recommendedProducts && data.recommendedProducts.length > 0) {
-        this.displayProducts(data.recommendedProducts);
-      } else {
-        this.productSuggestions.innerHTML = '';
+        this.addProductMessage(data.recommendedProducts);
       }
       
     } catch (error) {

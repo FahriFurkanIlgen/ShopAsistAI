@@ -18,6 +18,7 @@ export interface Product {
   additionalImageLinks?: string[];
   color?: string;
   size?: string;
+  gender?: string; // Erkek, Kadın, Kız, Erkek Çocuk, etc.
 }
 
 export interface GoogleFeed {
@@ -44,6 +45,12 @@ export interface ChatResponse {
   message: string;
   recommendedProducts?: Product[];
   confidence?: number;
+  debug?: {
+    originalQuery: string;
+    enhancedQuery: string;
+    isFollowUp: boolean;
+    queryType?: string; // 'irrelevant' for non-product queries
+  };
 }
 
 export interface SiteConfig {
