@@ -81,14 +81,14 @@ app.get('/health', (_req: Request, res: Response) => {
 const initializeFeeds = async () => {
   console.log('🚀 Initializing product feeds...');
   try {
-    const feedUrl = process.env.SKECHERS_FEED_URL;
-    const siteName = process.env.SITE_NAME || 'Skechers Turkey';
+    const feedUrl = process.env.HIGH5_FEED_URL;
+    const siteName = process.env.SITE_NAME || 'High5 Turkey';
     
     if (feedUrl) {
-      await feedParserService.parseFeed('skechers-tr', siteName, feedUrl);
+      await feedParserService.parseFeed('high5-tr', siteName, feedUrl);
       console.log('✅ Product feeds initialized successfully');
     } else {
-      console.warn('⚠️  No feed URL configured. Set SKECHERS_FEED_URL in .env');
+      console.warn('⚠️  No feed URL configured. Set HIGH5_FEED_URL in .env');
     }
   } catch (error) {
     console.error('❌ Error initializing feeds:', error);

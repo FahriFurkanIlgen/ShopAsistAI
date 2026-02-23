@@ -1,7 +1,7 @@
 const http = require('http');
 
 const data = JSON.stringify({
-  siteId: 'skechers-tr',
+  siteId: 'high5-tr',
   message: '28 numara bebek ayakkabısı kız ışıklı',
   conversationHistory: []
 });

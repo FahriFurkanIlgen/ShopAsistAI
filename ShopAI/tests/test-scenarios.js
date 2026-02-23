@@ -9,7 +9,7 @@ const http = require('http');
 const CONFIG = {
   hostname: 'localhost',
   port: 3000,
-  siteId: 'skechers-tr',
+  siteId: 'high5-tr',
   timeout: 30000
 };
 

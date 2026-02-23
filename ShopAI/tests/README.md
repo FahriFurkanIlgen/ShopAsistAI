@@ -246,7 +246,7 @@ fi
 ## 📝 Notes
 
 - Tests require server to be running on `localhost:3000`
-- Tests use `skechers-tr` siteId
+- Tests use `high5-tr` siteId
 - Context preservation tests validate `buildSearchQuery()` functionality
 - Performance tests measure real response times including AI processing
 - Test results include both functional and performance metrics

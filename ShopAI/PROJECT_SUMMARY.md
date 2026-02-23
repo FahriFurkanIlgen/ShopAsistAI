@@ -136,7 +136,7 @@ buildSearchQuery(currentMessage, history) {
   "cache": {
     "keys": 1,
     "searchServices": {
-      "skechers-tr": {
+      "high5-tr": {
         "isIndexed": true,
         "totalProducts": 13681,
         "cacheStats": {
@@ -288,7 +288,7 @@ PORT=3000
 OPENAI_API_KEY=sk-...
 OPENAI_MODEL=gpt-4-turbo-preview
 CACHE_TTL_SECONDS=3600
-SKECHERS_FEED_URL=https://...
+HIGH5_FEED_URL=https://...
 NODE_ENV=production
 ```
 
@@ -337,7 +337,7 @@ curl http://localhost:3000/health
       "vsize": 13681
     },
     "searchServices": {
-      "skechers-tr": {
+      "high5-tr": {
         "isIndexed": true,
         "totalProducts": 13681,
         "indexStats": {

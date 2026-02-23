@@ -30,8 +30,8 @@ async function testAIQueryParser() {
 
   // Test 4: Simple brand query (should use regex)
   console.log('Test 4: Simple Brand Query');
-  const result4 = await parser.parse('skechers 43 numara');
-  console.log('Query: "skechers 43 numara"');
+  const result4 = await parser.parse('high5 43 numara');
+  console.log('Query: "high5 43 numara"');
   console.log('Result:', JSON.stringify(result4, null, 2));
   console.log('Expected: Regex parser (simple pattern)\n');
 

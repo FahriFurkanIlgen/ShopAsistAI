@@ -12,7 +12,7 @@
 - **URL**: http://localhost:3000
 - **Durum**: ÇALIŞIYOR
 - **Versiyon**: 2.0.0-multi-tenant
-- **İndeksli Ürünler**: 13,986 (Skechers)
+- **İndeksli Ürünler**: 13,986 (High5)
 
 ### ✅ Frontend  
 - **URL**: http://localhost:3001
@@ -28,7 +28,7 @@
 **Test Edilen**: Tenant oluşturma, listeleme, API key sistemi
 
 **Sonuç**: BAŞARILI
-- Default tenant (Skechers): ✅ Var
+- Default tenant (High5): ✅ Var
 - Yeni tenant oluşturma: ✅ Çalışıyor
 - API key üretimi: ✅ Otomatik
 - Tenant bazlı config: ✅ Çalışıyor
@@ -51,7 +51,7 @@ Plan: Pro (100,000/ay)
   "status": "ok",
   "version": "2.0.0-multi-tenant",
   "cache": {
-    "searchServices": { "skechers-tr": { "totalProducts": 13986 } }
+    "searchServices": { "high5-tr": { "totalProducts": 13986 } }
   }
 }
 ```
@@ -112,7 +112,7 @@ Plan: Pro (100,000/ay)
 **URL**: http://localhost:3001/embed-demo.html
 
 **Test Senaryosu**:
-- [x] Skechers simülasyonu yükleniyor
+- [x] High5 simülasyonu yüklenecek
 - [x] Widget butonu sağ altta görünüyor
 - [ ] Manuel test: Widget açma
 - [ ] Manuel test: Mesaj gönderme
@@ -256,7 +256,7 @@ sk_live_test-shop_5bb5616f333d6d3e585ebda5ad4700a26d2d6fda7b2f6bf3
 **Widget Demo**: http://localhost:3001/embed-demo.html  
 **Shadow Test**: http://localhost:3001/shadow-test.html  
 
-**Default API Key**: `sk_test_skechers_tr_12345`  
+**Default API Key**: `sk_test_high5_tr_12345`  
 **Test API Key**: `sk_live_test-shop_5bb5616f333d6d3e585ebda5ad4700a26d2d6fda7b2f6bf3`
 
 ---

@@ -55,7 +55,7 @@ En basit yöntem - tek bir script tag ile entegre edin:
 <!-- Müşterinin sitesine ekleyeceği KOD -->
 <script>
   window.ShopAsistConfig = {
-    siteId: 'skechers-tr',
+    siteId: 'high5-tr',
     apiUrl: 'http://localhost:3000',
     widgetUrl: 'http://localhost:3001'
   };
@@ -73,7 +73,7 @@ Daha fazla kontrol için widget HTML'ini manuel ekleyin:
 <!-- ShopAsist AI Widget -->
 <script>
   window.ShopAsistConfig = {
-    siteId: 'skechers-tr',
+    siteId: 'high5-tr',
     apiUrl: 'http://localhost:3000'
   };
 </script>
@@ -101,20 +101,31 @@ Tüm yapılandırma seçenekleri ve özelleştirmeler için [INTEGRATION_GUIDE.m
 
 Widget'ın nasıl çalıştığını görmek için demo sayfalarımızı kullanın:
 
-**1. Widget Loader Demo (Önerilen) ⭐**
+**1. ChatGPT Tarzı Tam Sayfa Deneyim 🚀 (YENİ!)**
+```bash
+npm run dev
+# Tarayıcıda: http://localhost:3001/chat.html
+```
+ChatGPT benzeri tam sayfa arayüz! Popup olmadan, doğrudan sohbet deneyimi.
+- ✅ Tam ekran modern arayüz
+- ✅ Mesaj geçmişi
+- ✅ Ürünler grid view ile gösterilir
+- ✅ Marketplace yapısına uygun (çok markalı)
+
+**2. Widget Loader Demo ⭐**
 ```bash
 npm run dev
 # Tarayıcıda: http://localhost:3001/embed-demo.html
 ```
-Gerçek bir Skechers sitesini simüle eder. Widget tek script ile otomatik eklenir.
+Gerçek bir High5 sitesini simüle eder. Widget tek script ile otomatik eklenir.
 
-**2. Shadow DOM Isolation Test 🧪**
+**3. Shadow DOM Isolation Test 🧪**
 ```bash
 # Tarayıcıda: http://localhost:3001/shadow-test.html
 ```
 Extreme CSS ile widget'ın izolasyonunu test eder. Widget bu aggressive stillere karşı tamamen korumalıdır!
 
-**3. Manuel Demo**
+**4. Manuel Demo**
 ```bash
 # Tarayıcıda: http://localhost:3001/demo.html
 ```
@@ -176,7 +187,7 @@ cp .env.example .env
 OPENAI_API_KEY=your_openai_api_key_here
 
 # Google Shopping Feed URL'sini girin
-SKECHERS_FEED_URL=https://www.skechers.com.tr/feed/google-shopping
+HIGH5_FEED_URL=https://f-hfv-l.sm.mncdn.com/Integration/Xml/google.xml
 
 # Diğer ayarlar varsayılan olarak bırakılabilir
 PORT=3000
@@ -242,7 +253,7 @@ POST /api/chat
 Content-Type: application/json
 
 {
-  "siteId": "skechers-tr",
+  "siteId": "high5-tr",
   "message": "Koşu ayakkabısı arıyorum",
   "conversationHistory": []
 }
@@ -295,7 +306,7 @@ Content-Type: application/json
 
 {
   "brandBoosts": {
-    "skechers": 5.0,
+    "high5": 5.0,
     "nike": 3.0
   }
 }
@@ -414,14 +425,14 @@ curl http://localhost:3000/health
 
 2. Ürünlerin yüklendiğini kontrol edin:
 ```bash
-curl http://localhost:3000/api/products/skechers-tr
+curl http://localhost:3000/api/products/high5-tr
 ```
 
 3. Chat'i test edin:
 ```bash
 curl -X POST http://localhost:3000/api/chat \
   -H "Content-Type: application/json" \
-  -d '{"siteId":"skechers-tr","message":"Spor ayakkabı öner"}'
+  -d '{"siteId":"high5-tr","message":"Spor ayakkabı öner"}'
 ```
 
 ## 🐛 Sorun Giderme

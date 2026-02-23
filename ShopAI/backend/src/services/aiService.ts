@@ -24,7 +24,7 @@ export class AIService {
       const { siteId, message, conversationHistory = [] } = request;
 
       // Check for irrelevant queries first
-      const irrelevantResponse = this.checkIrrelevantQuery(message, siteId);
+      const irrelevantResponse = this.checkIrrelevantQuery(message, siteId, conversationHistory);
       if (irrelevantResponse) {
         console.log(`[AIService] Irrelevant query detected: "${message}"`);
         return irrelevantResponse;
@@ -32,8 +32,15 @@ export class AIService {
 
       const products = this.cacheService.getProducts(siteId);
       if (!products || products.length === 0) {
+        const errorMessage = 'Üzgünüm, şu anda ürün bilgilerine erişemiyorum. Lütfen daha sonra tekrar deneyin.';
+        const updatedHistory: ChatMessage[] = [
+          ...conversationHistory,
+          { role: 'user', content: message, timestamp: new Date() },
+          { role: 'assistant', content: errorMessage, timestamp: new Date() },
+        ];
         return {
-          message: 'Üzgünüm, şu anda ürün bilgilerine erişemiyorum. Lütfen daha sonra tekrar deneyin.',
+          message: errorMessage,
+          conversationHistory: updatedHistory,
         };
       }
 
@@ -74,17 +81,20 @@ export class AIService {
             model: process.env.OPENAI_MODEL || 'gpt-4-turbo-preview',
             messages: skuMessages,
             temperature: 0.7,
-            max_tokens: 250,
-            presence_penalty: 0.6,
-            frequency_penalty: 0.3,
-          });
-
+          max_tokens: 500,
           const aiMessage = completion.choices[0]?.message?.content || 
             `${skuQuery} kodlu ürünümüzü buldum! ${finalSkuProducts.length} farklı varyant mevcut.`;
 
+          const updatedHistory: ChatMessage[] = [
+            ...conversationHistory,
+            { role: 'user', content: message, timestamp: new Date() },
+            { role: 'assistant', content: aiMessage, timestamp: new Date() },
+          ];
+
           return {
             message: aiMessage,
-            recommendedProducts: finalSkuProducts.slice(0, 3),
+            recommendedProducts: finalSkuProducts.slice(0, 4),
+            conversationHistory: updatedHistory,
             debug: {
               originalQuery: message,
               enhancedQuery: `SKU Search: ${skuQuery}`,
@@ -107,15 +117,22 @@ export class AIService {
               model: process.env.OPENAI_MODEL || 'gpt-4-turbo-preview',
               messages: fuzzyMessages,
               temperature: 0.7,
-              max_tokens: 250,
+              max_tokens: 500,
             });
 
             const aiMessage = completion.choices[0]?.message?.content || 
               `${skuQuery} kodlu ürünü bulamadım, ancak benzer ürünlerimiz var.`;
 
+            const updatedHistory: ChatMessage[] = [
+              ...conversationHistory,
+              { role: 'user', content: message, timestamp: new Date() },
+              { role: 'assistant', content: aiMessage, timestamp: new Date() },
+            ];
+
             return {
               message: aiMessage,
-              recommendedProducts: fuzzyProducts.slice(0, 3),
+              recommendedProducts: fuzzyProducts.slice(0, 4),
+              conversationHistory: updatedHistory,
               debug: {
                 originalQuery: message,
                 enhancedQuery: `Fuzzy SKU Search: ${skuQuery}`,
@@ -166,8 +183,15 @@ export class AIService {
         const allProducts = this.postProcessAlternatives(relevantProducts, message);
         
         if (allProducts.length === 0) {
+          const errorMessage = `Üzgünüm, ${requestedSize} numara için stokta ürün bulamadım. Farklı bir numara denemek ister misiniz?`;
+          const updatedHistory: ChatMessage[] = [
+            ...conversationHistory,
+            { role: 'user', content: message, timestamp: new Date() },
+            { role: 'assistant', content: errorMessage, timestamp: new Date() },
+          ];
           return {
-            message: `Üzgünüm, ${requestedSize} numara için stokta ürün bulamadım. Farklı bir numara denemek ister misiniz?`,
+            message: errorMessage,
+            conversationHistory: updatedHistory,
           };
         }
         
@@ -178,7 +202,7 @@ export class AIService {
           model: process.env.OPENAI_MODEL || 'gpt-4-turbo-preview',
           messages: altMessages,
           temperature: 0.7,
-          max_tokens: 250,
+          max_tokens: 500,
           presence_penalty: 0.6,
           frequency_penalty: 0.3,
         });
@@ -186,9 +210,16 @@ export class AIService {
         const aiMessage = completion.choices[0]?.message?.content || 
           `Üzgünüm, ${requestedSize} numara için ürün bulamadım ama yakın bedenlerimiz var.`;
 
+        const updatedHistory: ChatMessage[] = [
+          ...conversationHistory,
+          { role: 'user', content: message, timestamp: new Date() },
+          { role: 'assistant', content: aiMessage, timestamp: new Date() },
+        ];
+
         return {
           message: aiMessage,
-          recommendedProducts: allProducts.slice(0, 3),
+          recommendedProducts: allProducts.slice(0, 4),
+          conversationHistory: updatedHistory,
           debug: {
             originalQuery: message,
             enhancedQuery: searchQuery,
@@ -203,16 +234,23 @@ export class AIService {
         model: process.env.OPENAI_MODEL || 'gpt-4-turbo-preview',
         messages,
         temperature: 0.7,
-        max_tokens: 250, // Reduced from 400 for token efficiency (2-3 sentence responses)
+        max_tokens: 500,
         presence_penalty: 0.6,
         frequency_penalty: 0.3,
       });
 
       const aiMessage = completion.choices[0]?.message?.content || 'Üzgünüm, bir yanıt oluşturamadım.';
 
+      const updatedHistory: ChatMessage[] = [
+        ...conversationHistory,
+        { role: 'user', content: message, timestamp: new Date() },
+        { role: 'assistant', content: aiMessage, timestamp: new Date() },
+      ];
+
       const response: ChatResponse = {
         message: aiMessage,
-        recommendedProducts: finalProducts.slice(0, 3),
+        recommendedProducts: finalProducts.slice(0, 4),
+        conversationHistory: updatedHistory,
         debug: {
           originalQuery: message,
           enhancedQuery: searchQuery,
@@ -226,8 +264,12 @@ export class AIService {
       return response;
     } catch (error) {
       console.error('AI Service Error:', error);
+      const errorMessage = 'Üzgünüm, bir hata oluştu. Lütfen tekrar deneyin.';
+      // Since we're in catch block, conversationHistory might not be accessible
+      // Return minimal response with empty history
       return {
-        message: 'Üzgünüm, bir hata oluştu. Lütfen tekrar deneyin.',
+        message: errorMessage,
+        conversationHistory: [],
       };
     }
   }
@@ -653,7 +695,7 @@ export class AIService {
       if (demographics.men && /erkek|men|adam/i.test(productText)) score += 10;
       if (demographics.women && /kadın|women|bayan/i.test(productText)) score += 10;
 
-      if (product.brand?.toLowerCase() === 'skechers') score += 2;
+      if (product.brand?.toLowerCase() === 'high5') score += 2;
 
       return { product, score };
     });
@@ -735,9 +777,9 @@ export class AIService {
       }
     }
     
-    // Fallback: if no products found with score threshold, return top 3 products anyway
+    // Fallback: if no products found with score threshold, return top 4 products anyway
     if (results.length === 0 && deduplicated.length > 0) {
-      return deduplicated.slice(0, 3).map(item => item.product);
+      return deduplicated.slice(0, 4).map(item => item.product);
     }
 
     return results;
@@ -749,11 +791,24 @@ export class AIService {
     products: Product[],
     siteId: string
   ): any[] {
-    const topProducts = products.slice(0, 6); // Reduced from 8 to 6 for token efficiency
+    // Check if user is asking for more products
+    const wantsMore = /^(evet|başka|farklı|daha|göster|var mı|olur)/i.test(userMessage.trim());
+    const startIndex = wantsMore ? 4 : 0; // Skip first 4 if asking for more
+    
+    const topProducts = products.slice(startIndex, startIndex + 4); // Show exactly 4 products
     
     // Extract requested size from user message
     const sizeMatch = userMessage.match(/\b(\d{1,2}(?:\.\d)?)\s*(?:numara|beden|size)?\b/i);
     const requestedSize = sizeMatch ? sizeMatch[1] : null;
+    
+    // Extract price range from user message
+    const priceMatch = userMessage.match(/(\d{3,5})\s*-?\s*(\d{3,5})?/);
+    let priceNote = '';
+    if (priceMatch) {
+      const minPrice = priceMatch[1];
+      const maxPrice = priceMatch[2] || minPrice;
+      priceNote = `\n\nÖNEMLİ: Müşteri ${minPrice}-${maxPrice} TL fiyat aralığı istiyor. Bu aralıktaki ürünlere öncelik ver!`;
+    }
     
     // Extract category keywords
     const categoryMatch = /sneker|sneaker|ayakkab[ıi]|bot|terlik|[çc]orap|[çc]anta/i.exec(userMessage);
@@ -782,27 +837,35 @@ export class AIService {
       ? `\nMüşteri "${requestedCategory}" arıyor. Sadece bu kategoriye uygun ürünleri öner. Örneğin sneaker isteyen müşteriye çorap önerme!`
       : '';
     
-    const systemPrompt = `${siteId} alışveriş danışmanısın. Sadece listelenen ürünleri öner.
+    const systemPrompt = `${siteId} alışveriş danışmanısın. 
 
-KURALLAR:
-1. Ürün adı + fiyat + özellik belirt
-2. İndirim varsa söyle
-3. Kısa ve öz yanıt (2-3 cümle)
-4. Müşterinin aradığına çok benzemeyen ürünleri önerme
-5. Kategori uyumsuzluğu varsa o ürünü önerme (örn: sneaker isteyen müşteriye çorap önerme)
-6. İstenen beden yoksa yakın bedenleri öner ve açıkla (örn: "43 numara stokta yok ama 42 ve 44 mevcut")
-7. Aradığı ürün hiç yoksa "Bu kategoride ürünümüz yok, alternatif ürünlere bakabilirsiniz" de${sizeNote}${categoryNote}
+ÖNEMLİ KURALLAR:
+1. SADECE aşağıdaki 4 üründen bahset - başka ürün ekleme!
+2. Her ürünü kısaca tanıt: Marka + Model + Fiyat + Öne çıkan özellik
+3. İndirim varsa mutlaka belirt
+4. Müşterinin kriterlerine uygunluğu vurgula
+5. Cevabını bitirmeden önce sor: "Başka ürün önerileri görmek ister misiniz?"${sizeNote}${priceNote}${categoryNote}
 
-ÜRÜNLER:
+ÖNERECEĞİN 4 ÜRÜN:
 ${topProducts.map((p, i) => {
       const discount = p.salePrice ? this.calculateDiscount(p.price, p.salePrice) : null;
       const price = discount?.hasDiscount 
         ? `${discount.newPrice} (%${discount.discountPercent} İNDİRİM, eski: ${discount.oldPrice})`
         : this.parsePrice(p.salePrice || p.price);
       
-      const specs = [p.color, p.size].filter(Boolean).join(', ');
-      return `${i + 1}. ${p.title} | ${price} | ${p.brand || '-'}${specs ? ' | ' + specs : ''}`;
-    }).join('\n')}`;
+      const specs = [p.gender, p.color, p.size].filter(Boolean).join(', ');
+      return `${i + 1}. ${p.brand || ''} ${p.title}\n   Fiyat: ${price}\n   Özellik: ${specs || 'Standart'}`;
+    }).join('\n\n')}
+
+ÖRNEK CEVAP:
+"Size 45 numara erkek koşu ayakkabıları buldum:
+
+1. HOKA Bondi 9 - 7.999 TL (Erkek, 45 numara)
+2. ON Cloudmonster 2 - 8.500 TL (%20 İNDİRİM, Erkek, 45)
+3. ASICS Gel-Nimbus - 6.800 TL (Erkek, Siyah, 45)
+4. Saucony Guide 18 - 6.999 TL (%30 İNDİRİM, Erkek, 45)
+
+Başka ürün önerileri görmek ister misiniz?"`;
 
     const messages: any[] = [
       { role: 'system', content: systemPrompt },
@@ -873,12 +936,34 @@ ${topProducts.map((p, i) => {
   private buildSearchQuery(currentMessage: string, history: ChatMessage[]): string {
     const normalized = currentMessage.toLowerCase().trim();
     
+    // Check if current message is a simple continuation request
+    const isContinuationRequest = 
+      /^(evet|tamam|olur|göster|yes|ok)$/i.test(normalized) ||
+      /(başka|daha\s*(fazla|çok)|more|diğer|other|farklı).*(ürün|product|var|göster|show|öneri)/i.test(normalized) ||
+      /(bunlar(dan)?\s*başka|bunun\s*dışında)/i.test(normalized);
+    
+    if (isContinuationRequest && history.length > 0) {
+      // Find the most recent user message with product context
+      for (let i = history.length - 1; i >= 0; i--) {
+        if (history[i].role === 'user') {
+          const userMsg = history[i].content;
+          // Check if it contains meaningful search criteria
+          const hasSearchContext = 
+            /\d{1,2}(?:\.\d)?\s*(numara|beden|size)/i.test(userMsg) ||
+            /(ayakkab[ıi]|bot|sneaker|koşu|terlik|[çc]orap|[çc]anta|bag)/i.test(userMsg) ||
+            /(erkek|kad[ıi]n|unisex|[çc]ocuk)/i.test(userMsg) ||
+            /\d{3,5}\s*-?\s*\d{0,5}\s*(tl|₺)/i.test(userMsg); // Price range
+          
+          if (hasSearchContext) {
+            console.log(`[AIService] Continuation request detected, reusing context: "${userMsg}"`);
+            return userMsg; // Reuse the entire search query
+          }
+        }
+      }
+    }
+    
     // Check if current message is context-dependent (short follow-up question)
     const isFollowUpQuestion = 
-      // Generic continuation requests
-      /(başka|daha\s*(fazla|çok)|more|diğer|other).*(ürün|product|var|göster|show)/i.test(normalized) ||
-      /(bunlar(dan)?\s*başka|bunun\s*dışında)/i.test(normalized) ||
-      /^(başka\s*(ne|hangi|neler)|daha\s*(ne|neler))/i.test(normalized) ||
       // Questions about variations
       /^(erkek|kadin|kız|unisex|beyaz|siyah|kırmızı|mavi).*(var\s*m[ıi]|olur\s*mu|bulunur\s*mu)/i.test(normalized) ||
       // Short modifications
@@ -909,22 +994,13 @@ ${topProducts.map((p, i) => {
     }
     
     if (!lastUserContext) {
-      // No relevant context found - but for generic "başka ürünler var" questions,
-      // try to use the last user message anyway
-      const lastUser = history.filter(m => m.role === 'user').pop();
-      if (lastUser && /(başka|daha\s*fazla|more)/i.test(normalized)) {
-        lastUserContext = lastUser.content;
-      }
-      
-      if (!lastUserContext) {
-        return currentMessage;
-      }
+      return currentMessage;
     }
     
     // Extract key attributes from previous context
     const sizeMatch = lastUserContext.match(/(\d{1,2}(?:\.\d)?)\s*(?:numara|beden|size)?/i);
     const categoryMatch = lastUserContext.match(/(ayakkab[ıi]|bot|sneaker|terlik|[çc]orap|[çc]anta|bag|backpack|yelek|vest|mont|jacket)/i);
-    const featureMatch = lastUserContext.match(/(spor|ışıklı|su\s*ge[çc]irmez|hafif|rahat|outdoor|indoor|running)/i);
+    const featureMatch = lastUserContext.match(/(spor|ışıklı|su\s*ge[çc]irmez|hafif|rahat|outdoor|indoor|running|koşu)/i);
     const childMatch = lastUserContext.match(/(bebek|[çc]ocuk)/i);
     
     // Build enhanced query
@@ -934,13 +1010,6 @@ ${topProducts.map((p, i) => {
     if (childMatch) contextParts.push(childMatch[1]);
     if (categoryMatch) contextParts.push(categoryMatch[1]);
     if (featureMatch) contextParts.push(featureMatch[1]);
-    
-    // For generic continuation requests ("başka ürünler var"), 
-    // use ONLY the context, don't append the request itself
-    if (/(başka|daha\s*fazla|more).*(ürün|product)/i.test(normalized)) {
-      console.log(`[AIService] Generic continuation detected, using context only: ${contextParts.join(' ')}`);
-      return contextParts.length > 0 ? contextParts.join(' ') : lastUserContext;
-    }
     
     // Combine with current message (which usually modifies gender/color)
     const enhancedQuery = `${contextParts.join(' ')} ${currentMessage}`;
@@ -969,14 +1038,14 @@ ${topProducts.map((p, i) => {
    * Check if query is irrelevant to product search
    * Returns a friendly response if query is irrelevant, null otherwise
    */
-  private checkIrrelevantQuery(message: string, siteId: string): ChatResponse | null {
+  private checkIrrelevantQuery(message: string, siteId: string, conversationHistory: ChatMessage[]): ChatResponse | null {
     const normalized = message.toLowerCase().trim();
     
     // GUARD CLAUSE: Very simple check for weather queries
     if (normalized.includes('hava') || normalized.includes('weather') || 
         normalized.includes('derece') || normalized.includes('degree')) {
       console.log(`[AIService] GUARD: Weather query detected`);
-      return this.generateIrrelevantResponse('hava', siteId);
+      return this.generateIrrelevantResponse('hava', siteId, message, conversationHistory);
     }
     
     // GUARD CLAUSE: Store location queries
@@ -985,7 +1054,7 @@ ${topProducts.map((p, i) => {
         (normalized.includes('nerede') || normalized.includes('istanbul') || normalized.includes('ankara') || 
          normalized.includes('where') || normalized.includes('hangi'))) {
       console.log(`[AIService] GUARD: Store location query detected`);
-      return this.generateIrrelevantResponse('magaza', siteId);
+      return this.generateIrrelevantResponse('magaza', siteId, message, conversationHistory);
     }
     
     // Normalize Turkish characters for better matching
@@ -1012,7 +1081,7 @@ ${topProducts.map((p, i) => {
     for (const check of quickChecks) {
       if (check.pattern.test(normalizedQuery)) {
         console.log(`[AIService] ✓ Quick check matched: ${check.pattern}`);
-        return this.generateIrrelevantResponse(check.type, siteId);
+        return this.generateIrrelevantResponse(check.type, siteId, message, conversationHistory);
       }
     }
     
@@ -1062,7 +1131,7 @@ ${topProducts.map((p, i) => {
           queryType = 'hesap';
         }
         
-        return this.generateIrrelevantResponse(queryType, siteId);
+        return this.generateIrrelevantResponse(queryType, siteId, message, conversationHistory);
       }
     }
     
@@ -1072,7 +1141,7 @@ ${topProducts.map((p, i) => {
     if (normalized.length < 15 && !/\b(ayakkabi|bot|terlik|corap|canta|sneaker|giyim|urun|beden|numara)\b/i.test(normalizedQuery)) {
       // Could be a greeting or off-topic
       if (/\b(merhaba|selam|hello|hi|hey|tamam|ok|tesekkur|thanks|sagol)\b/i.test(normalizedQuery)) {
-        return this.generateIrrelevantResponse('greeting', siteId);
+        return this.generateIrrelevantResponse('greeting', siteId, message, conversationHistory);
       }
     }
     
@@ -1164,36 +1233,43 @@ ${topProducts.map((p, i) => {
   /**
    * Generate friendly response for irrelevant queries
    */
-  private generateIrrelevantResponse(queryType: string, siteId: string): ChatResponse {
+  private generateIrrelevantResponse(queryType: string, siteId: string, message: string, conversationHistory: ChatMessage[]): ChatResponse {
     const brandName = siteId.charAt(0).toUpperCase() + siteId.slice(1);
     
-    let message = '';
+    let responseMessage = '';
     
     switch (queryType) {
       case 'hava':
-        message = `Merhaba! 😊\n\nBen ${brandName} alışveriş danışmanıyım ve sadece ürünler, beden önerileri ve alışveriş konularında yardımcı olabiliyorum. Hava durumu hakkında bilgi veremiyorum.\n\nAncak bugünkü hava için doğru kıyafet seçimine yardımcı olabilirim! Mevsime uygun bir ayakkabı, bot veya başka bir ürün mü arıyorsunuz? Size nasıl yardımcı olabilirim?`;
+        responseMessage = `Merhaba! 😊\n\nBen ${brandName} alışveriş danışmanıyım ve sadece ürünler, beden önerileri ve alışveriş konularında yardımcı olabiliyorum. Hava durumu hakkında bilgi veremiyorum.\n\nAncak bugünkü hava için doğru kıyafet seçimine yardımcı olabilirim! Mevsime uygun bir ayakkabı, bot veya başka bir ürün mü arıyorsunuz? Size nasıl yardımcı olabilirim?`;
         break;
       
       case 'magaza':
-        message = `Merhaba! 😊\n\nBen ${brandName} ürün danışmanıyım. Mağaza konumları ve şube bilgileri için web sitemizin "Mağazalarımız" veya "İletişim" sayfasını ziyaret edebilirsiniz.\n\nAncak size online alışverişinizde yardımcı olabilirim! Hangi ürünü arıyorsunuz? Beden, renk veya model konusunda size yardımcı olabilirim.`;
+        responseMessage = `Merhaba! 😊\n\nBen ${brandName} ürün danışmanıyım. Mağaza konumları ve şube bilgileri için web sitemizin "Mağazalarımız" veya "İletişim" sayfasını ziyaret edebilirsiniz.\n\nAncak size online alışverişinizde yardımcı olabilirim! Hangi ürünü arıyorsunuz? Beden, renk veya model konusunda size yardımcı olabilirim.`;
         break;
       
       case 'hesap':
-        message = `Merhaba! 😊\n\nHesap işlemleri ve giriş sorunları için müşteri hizmetlerimizle iletişime geçmenizi öneririm. Ben sadece ürün arama ve öneri konusunda yardımcı olabilirim.\n\nÜrün araması, beden önerisi veya model karşılaştırması gibi konularda size yardımcı olmaktan mutluluk duyarım!`;
+        responseMessage = `Merhaba! 😊\n\nHesap işlemleri ve giriş sorunları için müşteri hizmetlerimizle iletişime geçmenizi öneririm. Ben sadece ürün arama ve öneri konusunda yardımcı olabilirim.\n\nÜrün araması, beden önerisi veya model karşılaştırması gibi konularda size yardımcı olmaktan mutluluk duyarım!`;
         break;
       
       case 'greeting':
-        message = `Merhaba! 😊\n\nBen ${brandName} alışveriş asistanıyım. Size ürün önerileri sunabilir, beden ve renk seçiminde yardımcı olabilirim.\n\nNe tür bir ürün arıyorsunuz? Ayakkabı, bot, terlik veya başka bir şey?`;
+        responseMessage = `Merhaba! 😊\n\nBen ${brandName} alışveriş asistanıyım. Size ürün önerileri sunabilir, beden ve renk seçiminde yardımcı olabilirim.\n\nNe tür bir ürün arıyorsunuz? Ayakkabı, bot, terlik veya başka bir şey?`;
         break;
       
       default:
-        message = `Merhaba! 😊\n\nBen ${brandName} alışveriş danışmanıyım ve size ürünlerimiz, beden önerileri ve alışveriş konularında yardımcı olabilirim.\n\nHangi ürünü arıyorsunuz? Size nasıl yardımcı olabilirim?`;
+        responseMessage = `Merhaba! 😊\n\nBen ${brandName} alışveriş danışmanıyım ve size ürünlerimiz, beden önerileri ve alışveriş konularında yardımcı olabilirim.\n\nHangi ürünü arıyorsunuz? Size nasıl yardımcı olabilirim?`;
     }
     
+    const updatedHistory: ChatMessage[] = [
+      ...conversationHistory,
+      { role: 'user', content: message, timestamp: new Date() },
+      { role: 'assistant', content: responseMessage, timestamp: new Date() },
+    ];
+    
     return {
-      message,
+      message: responseMessage,
+      conversationHistory: updatedHistory,
       debug: {
-        originalQuery: '',
+        originalQuery: message,
         enhancedQuery: '',
         isFollowUp: false,
         queryType: 'irrelevant',

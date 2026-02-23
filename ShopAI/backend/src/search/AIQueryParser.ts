@@ -135,9 +135,9 @@ export class AIQueryParser {
     const systemPrompt = `Sen bir e-ticaret arama query parser'ısın. Kullanıcının serbest metinden attribute'ları çıkar.
 
 ÇIKARILACAK ATTRIBUTES:
-- brand: Marka adı (örn: "skechers", "nike", "adidas")
+- brand: Marka adı (örn: "hoka", "on", "asics", "saucony", "salomon", "brooks", "skechers", "nike", "adidas")
 - color: Renk (örn: "siyah", "beyaz", "mavi")
-- category: ÜRÜN KATEGORİSİ listesi - Çok dikkatli ol! (örn: ["terlik", "sandal"], ["sneaker", "spor ayakkabı"], ["canta"])
+- category: ÜRÜN KATEGÖRİSİ listesi - Çok dikkatli ol! (örn: ["terlik", "sandal"], ["sneaker", "spor ayakkabı"], ["ceket"], ["tayt"])
 - size: Beden/numara (örn: "43", "42.5", "L")
 - priceRange: Fiyat aralığı {min, max} (örn: {min: 1000, max: 2000})
 - keywords: Diğer anahtar kelimeler (array)

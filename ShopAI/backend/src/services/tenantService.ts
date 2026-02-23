@@ -29,18 +29,18 @@ export class TenantService {
    */
   private initializeDefaultTenants(): void {
     const defaultTenant: Tenant = {
-      id: 'tenant_skechers_tr',
-      apiKey: 'sk_test_skechers_tr_12345',
-      siteId: 'skechers-tr',
-      siteName: 'SKECHERS Türkiye',
-      domain: 'skechers.com.tr',
-      feedUrl: process.env.SKECHERS_FEED_URL || 'https://www.skechers.com.tr/feed/google-shopping',
+      id: 'tenant_high5_tr',
+      apiKey: 'sk_test_high5_tr_12345',
+      siteId: 'high5-tr',
+      siteName: 'HIGH5 Türkiye',
+      domain: 'high5.com.tr',
+      feedUrl: process.env.HIGH5_FEED_URL || 'https://f-hfv-l.sm.mncdn.com/Integration/Xml/google.xml',
       brandLogo: '',
       primaryColor: '#022d56',
       secondaryColor: '#0ea5e9',
       welcomeMessage: 'Merhaba! {SITE_NAME} alışveriş asistanınız.',
       welcomeSubtext: 'Aradığınız ürünü bulmanıza yardımcı olabilirim.',
-      privacyPolicyUrl: 'https://www.skechers.com.tr/gizlilik-politikasi',
+      privacyPolicyUrl: 'https://www.high5.com.tr/gizlilik-politikasi',
       categories: [
         { label: '👟 Koşu Ayakkabıları', keywords: ['running', 'koşu', 'run'] },
         { label: '🚶 Günlük Ayakkabılar', keywords: ['casual', 'lifestyle', 'günlük'] },

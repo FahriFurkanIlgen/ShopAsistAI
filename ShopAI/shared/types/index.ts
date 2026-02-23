@@ -44,6 +44,7 @@ export interface ChatRequest {
 export interface ChatResponse {
   message: string;
   recommendedProducts?: Product[];
+  conversationHistory?: ChatMessage[];
   confidence?: number;
   debug?: {
     originalQuery: string;

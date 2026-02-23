@@ -102,21 +102,21 @@ POST /api/config/:siteId  → setSiteConfig() çağırır (search index rebuild)
 ### Option 1: REST API ile
 ```bash
 # v2 (Hybrid) kullan
-curl -X POST http://localhost:3000/api/config/parser-version/skechers-tr \
+curl -X POST http://localhost:3000/api/config/parser-version/high5-tr \
   -H "Content-Type: application/json" \
   -d '{"version": "v2"}'
 
 # Mevcut versiyonu kontrol et
-curl http://localhost:3000/api/config/parser-version/skechers-tr
+curl http://localhost:3000/api/config/parser-version/high5-tr
 ```
 
 ### Option 2: Config dosyasından
 ```bash
-curl -X POST http://localhost:3000/api/config/skechers-tr \
+curl -X POST http://localhost:3000/api/config/high5-tr \
   -H "Content-Type: application/json" \
   -d '{
-    "siteId": "skechers-tr",
-    "siteName": "Skechers Turkey",
+    "siteId": "high5-tr",
+    "siteName": "High5 Turkey",
     "queryParserVersion": "v2"
   }'
 ```
@@ -124,7 +124,7 @@ curl -X POST http://localhost:3000/api/config/skechers-tr \
 ### Option 3: Kod ile
 ```typescript
 const cacheService = CacheService.getInstance();
-cacheService.setParserVersion('skechers-tr', 'v2');
+cacheService.setParserVersion('high5-tr', 'v2');
 ```
 
 ---
@@ -158,9 +158,9 @@ const results3 = await searchService.search(...);
 ```
 
 ### 2. Default Version
-`skechers-tr` için default version **v1** olarak ayarlı. Hybrid kullanmak için:
+`high5-tr` için default version **v1** olarak ayarlı. Hybrid kullanmak için:
 ```bash
-curl -X POST http://localhost:3000/api/config/parser-version/skechers-tr \
+curl -X POST http://localhost:3000/api/config/parser-version/high5-tr \
   -H "Content-Type: application/json" \
   -d '{"version": "v2"}'
 ```
@@ -174,7 +174,7 @@ curl -X POST http://localhost:3000/api/config/parser-version/skechers-tr \
 curl -X POST http://localhost:3000/api/chat \
   -H "Content-Type: application/json" \
   -d '{
-    "siteId": "skechers-tr",
+    "siteId": "high5-tr",
     "message": "beyaz 43 numara sneaker"
   }'
 ```
@@ -184,7 +184,7 @@ curl -X POST http://localhost:3000/api/chat \
 curl -X POST http://localhost:3000/api/chat \
   -H "Content-Type: application/json" \
   -d '{
-    "siteId": "skechers-tr",
+    "siteId": "high5-tr",
     "message": "yaklaşık 2000 lira civarında rahat günlük spor ayakkabı"
   }'
 ```
@@ -229,14 +229,14 @@ cd backend
 npm run dev
 
 # Parser version'u v2'ye ayarla (önerilen)
-curl -X POST http://localhost:3000/api/config/parser-version/skechers-tr \
+curl -X POST http://localhost:3000/api/config/parser-version/high5-tr \
   -H "Content-Type: application/json" \
   -d '{"version": "v2"}'
 
 # Test et
 curl -X POST http://localhost:3000/api/chat \
   -H "Content-Type: application/json" \
-  -d '{"siteId": "skechers-tr", "message": "yaklaşık 2000 lira rahat ayakkabı"}'
+  -d '{"siteId": "high5-tr", "message": "yaklaşık 2000 lira rahat ayakkabı"}'
 ```
 
 ---

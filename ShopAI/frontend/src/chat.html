@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>High5 AI Shopping Assistant</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --primary-color: #000000;
+      --secondary-color: #333333;
+      --bg-color: #f7f7f8;
+      --chat-bg: #ffffff;
+      --user-msg-bg: #f7f7f8;
+      --ai-msg-bg: #ffffff;
+      --border-color: #e5e5e5;
+      --text-primary: #2d2d2d;
+      --text-secondary: #8b8b8b;
+      --shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.12);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif;
+      background: var(--bg-color);
+      color: var(--text-primary);
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .container {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      max-width: 1400px;
+      margin: 0 auto;
+      background: white;
+      box-shadow: var(--shadow-lg);
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 2rem;
+      background: white;
+      border-bottom: 1px solid var(--border-color);
+      box-shadow: var(--shadow);
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .logo {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--primary-color);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .logo-icon {
+      font-size: 2rem;
+    }
+
+    .subtitle {
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+    }
+
+    /* Chat Container */
+    .chat-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 2rem;
+      background: var(--bg-color);
+    }
+
+    .chat-messages {
+      /* max-width: 900px; */
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    /* Welcome Message */
+    .welcome-message {
+      text-align: center;
+      padding: 3rem 2rem;
+      color: var(--text-secondary);
+    }
+
+    .welcome-message h1 {
+      font-size: 2rem;
+      color: var(--text-primary);
+      margin-bottom: 0.5rem;
+    }
+
+    .welcome-message p {
+      font-size: 1.1rem;
+      margin-bottom: 2rem;
+    }
+
+    .quick-actions {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1rem;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    .quick-action {
+      background: white;
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 1.5rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-align: left;
+    }
+
+    .quick-action:hover {
+      border-color: var(--primary-color);
+      box-shadow: var(--shadow);
+      transform: translateY(-2px);
+    }
+
+    .quick-action-icon {
+      font-size: 1.5rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .quick-action-title {
+      font-weight: 600;
+      margin-bottom: 0.25rem;
+      color: var(--text-primary);
+    }
+
+    .quick-action-desc {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
+
+    /* Message Bubbles */
+    .message {
+      display: flex;
+      gap: 1rem;
+      animation: slideUp 0.3s ease-out;
+    }
+
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .message.user {
+      flex-direction: row-reverse;
+    }
+
+    .avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+      flex-shrink: 0;
+    }
+
+    .avatar.user-avatar {
+      background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+      color: white;
+    }
+
+    .avatar.ai-avatar {
+      background: #f0f0f0;
+      color: var(--text-primary);
+    }
+
+    .message-content {
+      max-width: 70%;
+      background: white;
+      padding: 1rem 1.25rem;
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+    }
+
+    .message.user .message-content {
+      background: var(--primary-color);
+      color: white;
+    }
+
+    .message-text {
+      line-height: 1.5;
+      white-space: pre-wrap;
+    }
+
+    .message-time {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      margin-top: 0.5rem;
+    }
+
+    .message.user .message-time {
+      color: rgba(255, 255, 255, 0.7);
+    }
+
+    /* Product Cards Grid */
+    .products-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+
+    @media (max-width: 1200px) {
+      .products-grid {
+        grid-template-columns: repeat(3, 1fr);
+      }
+    }
+
+    @media (max-width: 900px) {
+      .products-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (max-width: 600px) {
+      .products-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .product-card {
+      background: white;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      overflow: hidden;
+      transition: all 0.2s;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    .product-card:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-lg);
+    }
+
+    .product-image-container {
+      position: relative;
+      width: 100%;
+      padding-top: 100%;
+      background: #f5f5f5;
+      overflow: hidden;
+    }
+
+    .product-image {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    .wishlist-btn {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      width: 32px;
+      height: 32px;
+      background: white;
+      border: none;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      z-index: 10;
+    }
+
+    .wishlist-btn:hover {
+      background: #f0f0f0;
+      transform: scale(1.1);
+    }
+
+    .wishlist-icon {
+      width: 18px;
+      height: 18px;
+      stroke: #666;
+      fill: none;
+      stroke-width: 1.5;
+    }
+
+    .product-info {
+      padding: 0.875rem;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 0.375rem;
+    }
+
+    .product-title {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: #000000;
+      line-height: 1.3;
+      margin-bottom: 0.125rem;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .product-description {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      line-height: 1.2;
+      margin-bottom: 0.5rem;
+    }
+
+    .product-price {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      margin-top: auto;
+    }
+
+    .price-row {
+      display: flex;
+      align-items: baseline;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .current-price {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #000000;
+    }
+
+    .original-price {
+      font-size: 0.8rem;
+      color: #999999;
+      text-decoration: line-through;
+    }
+
+    .discount-badge {
+      background: transparent;
+      color: #e74c3c;
+      padding: 0;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    .product-colors {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      margin-top: 0.25rem;
+    }
+
+    /* Input Area */
+    .input-area {
+      background: white;
+      border-top: 1px solid var(--border-color);
+      padding: 1.5rem 2rem;
+      box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.05);
+    }
+
+    .input-wrapper {
+      max-width: 900px;
+      margin: 0 auto;
+      display: flex;
+      gap: 1rem;
+      align-items: flex-end;
+    }
+
+    .input-container {
+      flex: 1;
+      position: relative;
+    }
+
+    #userInput {
+      width: 100%;
+      padding: 1rem 3.5rem 1rem 1.25rem;
+      border: 2px solid var(--border-color);
+      border-radius: 24px;
+      font-size: 1rem;
+      font-family: inherit;
+      resize: none;
+      max-height: 120px;
+      transition: all 0.2s;
+    }
+
+    #userInput:focus {
+      outline: none;
+      border-color: var(--primary-color);
+      box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .send-button {
+      position: absolute;
+      right: 0.5rem;
+      bottom: 0.5rem;
+      width: 40px;
+      height: 40px;
+      background: var(--primary-color);
+      color: white;
+      border: none;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      font-size: 1.2rem;
+    }
+
+    .send-button:hover:not(:disabled) {
+      background: var(--secondary-color);
+      transform: scale(1.05);
+    }
+
+    .send-button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* Typing Indicator */
+    .typing-indicator {
+      display: flex;
+      gap: 0.25rem;
+      padding: 1rem;
+    }
+
+    .typing-dot {
+      width: 8px;
+      height: 8px;
+      background: var(--text-secondary);
+      border-radius: 50%;
+      animation: typing 1.4s infinite;
+    }
+
+    .typing-dot:nth-child(2) {
+      animation-delay: 0.2s;
+    }
+
+    .typing-dot:nth-child(3) {
+      animation-delay: 0.4s;
+    }
+
+    @keyframes typing {
+      0%, 60%, 100% {
+        transform: translateY(0);
+        opacity: 0.5;
+      }
+      30% {
+        transform: translateY(-10px);
+        opacity: 1;
+      }
+    }
+
+    /* Loading Spinner */
+    .loading {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 3px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      border-top-color: white;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .header {
+        padding: 1rem;
+      }
+
+      .chat-container {
+        padding: 1rem;
+      }
+
+      .message-content {
+        max-width: 85%;
+      }
+
+      .products-grid {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 1rem;
+      }
+
+      .product-image {
+        height: 180px;
+      }
+
+      .quick-actions {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Scrollbar styles */
+    .chat-container::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    .chat-container::-webkit-scrollbar-track {
+      background: var(--bg-color);
+    }
+
+    .chat-container::-webkit-scrollbar-thumb {
+      background: #d0d0d0;
+      border-radius: 4px;
+    }
+
+    .chat-container::-webkit-scrollbar-thumb:hover {
+      background: #b0b0b0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <div class="header-left">
+        <div class="logo">
+          <div>
+            <div style="display: flex;align-items: center;"><img src="images/highfive.svg" alt="High5 Logo" width="120px;"> AI</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Chat Container -->
+    <div class="chat-container" id="chatContainer">
+      <div class="chat-messages" id="chatMessages">
+        <!-- Welcome Message -->
+        <div class="welcome-message" id="welcomeMessage">
+          <h1>👋 Merhaba!</h1>
+          <p>High5'te aradığınız ürünü bulmanıza yardımcı olabilirim</p>
+          
+          <div class="quick-actions">
+            <div class="quick-action" onclick="sendQuickMessage('Koşu ayakkabısı arıyorum')">
+              <div class="quick-action-icon">🏃</div>
+              <div class="quick-action-title">Koşu Ayakkabısı</div>
+              <div class="quick-action-desc">Yüksek performanslı koşu ayakkabıları</div>
+            </div>
+            
+            <div class="quick-action" onclick="sendQuickMessage('2000-3000 TL arası spor ayakkabı')">
+              <div class="quick-action-icon">💰</div>
+              <div class="quick-action-title">Bütçeye Uygun</div>
+              <div class="quick-action-desc">Fiyat aralığında ürün önerileri</div>
+            </div>
+            
+            <div class="quick-action" onclick="sendQuickMessage('ON marka kadın ayakkabısı')">
+              <div class="quick-action-icon">⭐</div>
+              <div class="quick-action-title">Markaya Göre</div>
+              <div class="quick-action-desc">Favori markanızdan ürünler</div>
+            </div>
+            
+            <div class="quick-action" onclick="sendQuickMessage('İndirimli ürünler')">
+              <div class="quick-action-icon">🏷️</div>
+              <div class="quick-action-title">İndirimler</div>
+              <div class="quick-action-desc">Kampanyalı ürünleri keşfedin</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Input Area -->
+    <div class="input-area">
+      <div class="input-wrapper">
+        <div class="input-container">
+          <textarea 
+            id="userInput" 
+            placeholder="Mesajınızı yazın... (örn: 'koşu ayakkabısı arıyorum')"
+            rows="1"
+            onkeydown="handleKeyDown(event)"
+          ></textarea>
+          <button class="send-button" id="sendButton" onclick="sendMessage()">
+            ➤
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE_URL = 'http://localhost:3000';
+    const SITE_ID = 'high5-tr';
+    let conversationHistory = [];
+    let isProcessing = false;
+
+    // Auto-resize textarea
+    const textarea = document.getElementById('userInput');
+    textarea.addEventListener('input', function() {
+      this.style.height = 'auto';
+      this.style.height = (this.scrollHeight) + 'px';
+    });
+
+    function handleKeyDown(event) {
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        sendMessage();
+      }
+    }
+
+    function sendQuickMessage(message) {
+      document.getElementById('userInput').value = message;
+      sendMessage();
+    }
+
+    async function sendMessage() {
+      const input = document.getElementById('userInput');
+      const message = input.value.trim();
+      
+      if (!message || isProcessing) return;
+
+      // Hide welcome message
+      const welcomeMsg = document.getElementById('welcomeMessage');
+      if (welcomeMsg) {
+        welcomeMsg.style.display = 'none';
+      }
+
+      // Add user message
+      addMessage('user', message);
+      
+      // Clear input
+      input.value = '';
+      input.style.height = 'auto';
+      
+      // Show typing indicator
+      const typingId = addTypingIndicator();
+      
+      isProcessing = true;
+      document.getElementById('sendButton').disabled = true;
+
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/chat`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            siteId: SITE_ID,
+            message: message,
+            conversationHistory: conversationHistory
+          })
+        });
+
+        const data = await response.json();
+        
+        // Debug: Log response data
+        console.log('📦 API Response:', data);
+        console.log('🛍️ Products:', data.recommendedProducts);
+        console.log('📊 Products count:', data.recommendedProducts?.length || 0);
+        
+        // Remove typing indicator
+        removeTypingIndicator(typingId);
+        
+        // Update conversation history
+        conversationHistory = data.conversationHistory || [];
+        
+        // Add AI response (use recommendedProducts not products!)
+        addMessage('ai', data.message, data.recommendedProducts);
+
+      } catch (error) {
+        console.error('Error:', error);
+        removeTypingIndicator(typingId);
+        addMessage('ai', 'Üzgünüm, bir hata oluştu. Lütfen tekrar deneyin.');
+      } finally {
+        isProcessing = false;
+        document.getElementById('sendButton').disabled = false;
+        input.focus();
+      }
+    }
+
+    function addMessage(type, text, products = null) {
+      const messagesContainer = document.getElementById('chatMessages');
+      const messageDiv = document.createElement('div');
+      messageDiv.className = `message ${type}`;
+
+      const avatar = document.createElement('div');
+      avatar.className = `avatar ${type}-avatar`;
+      avatar.textContent = type === 'user' ? '👤' : '🤖';
+
+      const contentDiv = document.createElement('div');
+      contentDiv.className = 'message-content';
+
+      const textDiv = document.createElement('div');
+      textDiv.className = 'message-text';
+      textDiv.textContent = text;
+
+      const timeDiv = document.createElement('div');
+      timeDiv.className = 'message-time';
+      timeDiv.textContent = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+
+      contentDiv.appendChild(textDiv);
+      contentDiv.appendChild(timeDiv);
+
+      messageDiv.appendChild(avatar);
+      messageDiv.appendChild(contentDiv);
+
+      messagesContainer.appendChild(messageDiv);
+
+      // Add products if available
+      if (products && products.length > 0) {
+        console.log('✅ Creating product grid with', products.length, 'products');
+        const productsDiv = createProductsGrid(products);
+        messagesContainer.appendChild(productsDiv);
+      } else {
+        console.log('❌ No products to display:', products);
+      }
+
+      // Scroll to bottom
+      scrollToBottom();
+    }
+
+    function createProductsGrid(products) {
+      console.log('🎨 Creating grid for products:', products);
+      const container = document.createElement('div');
+      container.style.marginLeft = '56px'; // Align with messages
+      container.style.marginBottom = '1.5rem';
+
+      const grid = document.createElement('div');
+      grid.className = 'products-grid';
+
+      products.forEach(product => {
+        const card = createProductCard(product);
+        grid.appendChild(card);
+      });
+
+      container.appendChild(grid);
+      return container;
+    }
+
+    function createProductCard(product) {
+      const card = document.createElement('div');
+      card.className = 'product-card';
+      card.onclick = () => window.open(product.link, '_blank');
+
+      // Image container with wishlist button
+      const imageContainer = document.createElement('div');
+      imageContainer.className = 'product-image-container';
+
+      const wishlistBtn = document.createElement('button');
+      wishlistBtn.className = 'wishlist-btn';
+      wishlistBtn.innerHTML = `<svg class="wishlist-icon" viewBox="0 0 24 24">
+        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+      </svg>`;
+      wishlistBtn.onclick = (e) => {
+        e.stopPropagation();
+        // Wishlist functionality can be added here
+      };
+
+      const img = document.createElement('img');
+      img.className = 'product-image';
+      img.src = product.imageLink || 'https://via.placeholder.com/400x400?text=No+Image';
+      img.alt = product.title;
+      img.loading = 'lazy';
+
+      imageContainer.appendChild(img);
+      imageContainer.appendChild(wishlistBtn);
+
+      const info = document.createElement('div');
+      info.className = 'product-info';
+
+      const title = document.createElement('div');
+      title.className = 'product-title';
+      title.textContent = product.title;
+
+      const description = document.createElement('div');
+      description.className = 'product-description';
+      // Extract description from title or use a generic one
+      const titleParts = product.title.split(' - ');
+      description.textContent = titleParts[1] || product.gender || '';
+
+      const priceContainer = document.createElement('div');
+      priceContainer.className = 'product-price';
+
+      const priceRow = document.createElement('div');
+      priceRow.className = 'price-row';
+
+      const currentPrice = document.createElement('div');
+      currentPrice.className = 'current-price';
+      currentPrice.textContent = formatPrice(product.salePrice || product.price);
+
+      priceRow.appendChild(currentPrice);
+
+      // Show original price and discount if on sale
+      if (product.salePrice && product.price !== product.salePrice) {
+        const originalPrice = document.createElement('div');
+        originalPrice.className = 'original-price';
+        originalPrice.textContent = formatPrice(product.price);
+        priceRow.appendChild(originalPrice);
+
+        const discount = calculateDiscount(product.price, product.salePrice);
+        if (discount > 0) {
+          const badge = document.createElement('div');
+          badge.className = 'discount-badge';
+          badge.textContent = `%${discount} İndirim`;
+          priceRow.appendChild(badge);
+        }
+      }
+
+      priceContainer.appendChild(priceRow);
+
+      // Add color information if available
+      const colors = document.createElement('div');
+      colors.className = 'product-colors';
+      colors.textContent = '3 Renk'; // This can be dynamic if color data is available
+
+      info.appendChild(title);
+      info.appendChild(description);
+      info.appendChild(priceContainer);
+      info.appendChild(colors);
+
+      card.appendChild(imageContainer);
+      card.appendChild(info);
+
+      return card;
+    }
+
+    function formatPrice(price) {
+      if (!price) return 'Fiyat yok';
+      const numericPrice = parseFloat(price.toString().replace(/[^0-9.,]/g, '').replace(',', '.'));
+      return numericPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' TRY';
+    }
+
+    function calculateDiscount(originalPrice, salePrice) {
+      const original = parseFloat(originalPrice.toString().replace(/[^0-9.,]/g, '').replace(',', '.'));
+      const sale = parseFloat(salePrice.toString().replace(/[^0-9.,]/g, '').replace(',', '.'));
+      return Math.round(((original - sale) / original) * 100);
+    }
+
+    function addTypingIndicator() {
+      const messagesContainer = document.getElementById('chatMessages');
+      const messageDiv = document.createElement('div');
+      messageDiv.className = 'message ai';
+      messageDiv.id = 'typing-indicator';
+
+      const avatar = document.createElement('div');
+      avatar.className = 'avatar ai-avatar';
+      avatar.textContent = '🤖';
+
+      const contentDiv = document.createElement('div');
+      contentDiv.className = 'message-content';
+
+      const typingDiv = document.createElement('div');
+      typingDiv.className = 'typing-indicator';
+      typingDiv.innerHTML = '<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>';
+
+      contentDiv.appendChild(typingDiv);
+      messageDiv.appendChild(avatar);
+      messageDiv.appendChild(contentDiv);
+
+      messagesContainer.appendChild(messageDiv);
+      scrollToBottom();
+
+      return 'typing-indicator';
+    }
+
+    function removeTypingIndicator(id) {
+      const indicator = document.getElementById(id);
+      if (indicator) {
+        indicator.remove();
+      }
+    }
+
+    function scrollToBottom() {
+      const container = document.getElementById('chatContainer');
+      setTimeout(() => {
+        container.scrollTop = container.scrollHeight;
+      }, 100);
+    }
+
+    // Focus input on load
+    window.addEventListener('load', () => {
+      document.getElementById('userInput').focus();
+    });
+  </script>
+</body>
+</html>

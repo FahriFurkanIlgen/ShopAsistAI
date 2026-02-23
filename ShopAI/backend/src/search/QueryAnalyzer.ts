@@ -235,7 +235,7 @@ export class QueryAnalyzer {
     
     const hasColor = /(?:beyaz|siyah|kırmızı|mavi|yeşil|sarı|pembe|mor|turuncu|gri|kahverengi)/i.test(lowerQuery);
     const hasSize = /(?:\d{1,2}(?:\.5)?|numara)/i.test(lowerQuery);
-    const hasBrand = /(?:skechers|nike|adidas)/i.test(lowerQuery);
+    const hasBrand = /(?:hoka|on|asics|saucony|salomon|brooks|skechers|nike|adidas|puma|reebok|new balance|under armour|mizuno)/i.test(lowerQuery);
     
     const attributeCount = [hasColor, hasSize, hasBrand].filter(Boolean).length;
     

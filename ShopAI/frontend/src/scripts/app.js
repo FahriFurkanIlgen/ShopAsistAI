@@ -2,7 +2,7 @@
 // Configuration from parent page
 const widgetConfig = window.ShopAsistConfig || {};
 const API_BASE_URL = widgetConfig.apiUrl || 'http://localhost:3000';
-const SITE_ID = widgetConfig.siteId || 'skechers-tr';
+const SITE_ID = widgetConfig.siteId || 'high5-tr';
 
 // Get root element (Shadow DOM or document)
 const getRoot = () => {
@@ -48,12 +48,14 @@ class ChatWidget {
     this.privacyLink = this.root.getElementById('privacy-link');
     this.closePrivacy = this.root.getElementById('close-privacy');
     this.brandingFooter = this.root.getElementById('branding-footer');
+    this.brandingText = this.root.getElementById('branding-text');
     
     if (this.closePrivacy) {
       this.closePrivacy.addEventListener('click', () => {
         this.privacyFooter.style.display = 'none';
       });
     }
+  }
 
   async loadConfig() {
     try {
@@ -172,8 +174,8 @@ class ChatWidget {
       );
       const data = await response.json();
 
-      if (data.products && data.products.length > 0) {
-        this.addProductMessage(data.products, `${this.selectedCategory.name} kategorisinde sizin için seçtiklerim:`);
+      if (data.recommendedProducts && data.recommendedProducts.length > 0) {
+        this.addProductMessage(data.recommendedProducts, `${this.selectedCategory.name} kategorisinde sizin için seçtiklerim:`);
         
         // Hide welcome section after category selection
         if (this.conversationHistory.length === 0) {

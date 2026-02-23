@@ -87,7 +87,7 @@ Return: Empty + suggestion
 ### SIMPLE (Regex'e uygun)
 ```
 ✅ "beyaz 43 numara sneaker"
-✅ "skechers 42 numara"
+✅ "high5 42 numara"
 ✅ "siyah bot"
 ✅ "1000 lira altı spor ayakkabı"
 ✅ "nike air max"

@@ -25,7 +25,7 @@ Frontend: http://localhost:3001
 
 **Test Adımları**:
 1. Sayfanın yüklendiğini doğrula
-2. Default Skechers müşterisinin listelendiğini gör
+2. Default High5 müşterisinin listelendiğini gör
 3. Stats kartlarını kontrol et (Toplam Müşteri: 1, Aktif Müşteri: 1)
 4. Yeni müşteri ekle:
    - Site Adı: `Test Shop`
@@ -47,11 +47,11 @@ Frontend: http://localhost:3001
 **URL**: http://localhost:3001/embed-demo.html
 
 **Test Adımları**:
-1. Sayfanın gerçek bir Skechers sitesini simüle ettiğini gör
+1. Sayfanın gerçek bir High5 sitesini simüle ettiğini gör
 2. Sağ alt köşede chat butonunun göründüğünü onayla
 3. Chat butonuna tıkla
 4. Widget'ın açıldığını gör
-5. Hoş geldin mesajını kontrol et: "Merhaba, Skechers koleksiyonunda aradığınızı hızlıca bulalım."
+5. Hoş geldin mesajını kontrol et: "Merhaba, High5 koleksiyonunda aradığınızı hızlıca bulalım."
 6. Kategori butonlarını test et (Erkek, Kadın, Çocuk, vb.)
 7. Bir mesaj yaz: "42 numara erkek koşu ayakkabısı"
 8. AI'nin cevap verdiğini ve ürünleri gösterdiğini onayla
@@ -114,7 +114,7 @@ curl -X POST http://localhost:3000/api/tenants \
 curl http://localhost:3000/api/tenants
 ```
 
-**Beklenen**: En az 2 tenant (Skechers + yeni oluşturulan)
+**Beklenen**: En az 2 tenant (High5 + yeni oluşturulan)
 
 #### 4c. API Key ile Config Alma
 ```bash
@@ -162,7 +162,7 @@ curl http://localhost:3000/health
   "cache": {
     "siteConfigs": 1,
     "searchServices": 1,
-    "products": { "skechers-tr": 13681 }
+    "products": { "high5-tr": 13681 }
   },
   "version": "2.0.0-multi-tenant"
 }
@@ -192,7 +192,7 @@ done
 
 ### ✅ Test 9: Invalid API Key
 ```bash
-curl "http://localhost:3000/api/config/skechers-tr?apiKey=invalid-key"
+curl "http://localhost:3000/api/config/high5-tr?apiKey=invalid-key"
 ```
 
 **Beklenen Cevap**: 401 Unauthorized

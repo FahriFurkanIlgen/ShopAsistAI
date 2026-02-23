@@ -73,7 +73,7 @@ Belirli markaları kampanyalar için öne çıkarın:
 
 ```typescript
 {
-  'skechers': 5.0,   // Güçlü boost
+  'high5': 5.0,   // Güçlü boost
   'nike': 3.0,       // Orta boost
   'adidas': 2.0,     // Hafif boost
 }
@@ -151,7 +151,7 @@ searchService.setProductSignals(signals);
 const merchandising = searchService.getMerchandisingEngine();
 merchandising.updateConfig({
   brandBoosts: new Map([
-    ['skechers', 5.0],
+    ['high5', 5.0],
     ['nike', 3.0],
   ]),
 });
@@ -173,7 +173,7 @@ GET /api/merchandising/config/:siteId
 **Response:**
 ```json
 {
-  "siteId": "skechers-tr",
+  "siteId": "high5-tr",
   "config": {
     "signalWeights": { "textRelevance": 0.35, ... },
     "businessRules": { "boostNewProducts": true, ... },
@@ -219,7 +219,7 @@ Content-Type: application/json
 
 {
   "brandBoosts": {
-    "skechers": 5.0,
+    "high5": 5.0,
     "nike": 3.0,
     "adidas": 2.0
   }
@@ -403,11 +403,11 @@ merchandising.updateConfig({
 ```typescript
 merchandising.updateConfig({
   brandBoosts: new Map([
-    ['skechers', 8.0],  // ⬆️ Çok güçlü boost
+    ['high5', 8.0],  // ⬆️ Çok güçlü boost
   ]),
   pinnedProducts: new Map([
-    [0, 'skechers-featured-001'],  // İlk sıraya sabitle
-    [1, 'skechers-featured-002'],  // İkinci sıraya sabitle
+    [0, 'high5-featured-001'],  // İlk sıraya sabitle
+    [1, 'high5-featured-002'],  // İkinci sıraya sabitle
   ]),
   signalWeights: {
     textRelevance: 0.25,
@@ -428,7 +428,7 @@ merchandising.updateConfig({
 ### 🎄 Sezonluk Kampanya (Kış Sezonu)
 
 ```bash
-POST /api/merchandising/category-boost/skechers-tr
+POST /api/merchandising/category-boost/high5-tr
 {
   "categoryBoosts": {
     "boots": 5.0,

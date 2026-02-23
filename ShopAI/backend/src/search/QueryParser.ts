@@ -259,8 +259,10 @@ export class QueryParser {
    */
   private initializeBrandPatterns(): void {
     this.brandPatterns = [
+      // High5 Marketplace Ana Markalar
+      'HOKA', 'ON', 'ASICS', 'Saucony', 'Salomon', 'Brooks',
       'Skechers', 'Nike', 'Adidas', 'Puma', 'Reebok', 
-      'New Balance', 'Asics', 'Under Armour', 'Converse'
+      'New Balance', 'Under Armour', 'Converse', 'Mizuno'
     ];
   }
 
@@ -274,6 +276,15 @@ export class QueryParser {
       ['ayakkabi', ['ayakkabi', 'ayakkabı', 'shoe', 'shoes']],
       ['terlik', ['terlik', 'sandal', 'sandalet', 'slipper', 'slippers', 'plaj', 'havuz']],
       ['bot', ['bot', 'boot', 'cizme', 'çizme']],
+      
+      // Giyim kategorileri (High5 Marketplace)
+      ['ceket', ['ceket', 'jacket', 'mont', 'yelek', 'vest']],
+      ['sort', ['şort', 'short', 'shorts', 'şorts']],
+      ['tayt', ['tayt', 'tight', 'tights', 'legging', 'leggings']],
+      ['elbise', ['elbise', 'dress', 'dresses']],
+      ['tisort', ['tışört', 'tisort', 't-shirt', 'tshirt', 'tee']],
+      ['esofman', ['eşofman', 'esofman', 'tracksuit', 'sweatpants']],
+      ['hoodie', ['hoodie', 'sweatshirt', 'kapsonlu', 'kapşonlu']],
       
       // Aksesuar kategorileri
       ['canta', ['canta', 'çanta', 'bag', 'backpack', 'sirt cantasi', 'sırt çantası']],

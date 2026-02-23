@@ -3,60 +3,61 @@
 import { SearchService } from './search/SearchService';
 import { Product } from '../../shared/types';
 
-// Mock products for testing
+// Mock products for testing (High5 Marketplace brands)
 const mockProducts: Product[] = [
   {
-    id: 'ske-001',
-    title: 'Skechers Go Walk 6 Siyah Erkek Spor Ayakkabı',
-    brand: 'Skechers',
-    price: '1299.99 TL',
-    salePrice: '999.99 TL',
+    id: 'hoka-001',
+    title: 'HOKA Bondi 9 Siyah Erkek Koşu Ayakkabısı',
+    brand: 'HOKA',
+    price: '9999.00 TL',
+    salePrice: '7999.20 TL',
     imageLink: 'https://example.com/img1.jpg',
     link: 'https://example.com/prod1',
     color: 'Siyah',
     size: '43',
-    productType: 'Spor Ayakkabı',
-    description: 'Rahat günlük spor ayakkabı',
+    productType: 'Koşu Ayakkabısı',
+    description: 'Maksimum yastıklama ve konfor',
     availability: 'in stock',
   },
   {
-    id: 'ske-002',
-    title: 'Skechers D\'Lites Beyaz Kadın Sneakers',
-    brand: 'Skechers',
-    price: '1499.99 TL',
+    id: 'on-001',
+    title: 'ON Cloudmonster 2 Beyaz Kadın Koşu Ayakkabısı',
+    brand: 'ON',
+    price: '13999.00 TL',
     imageLink: 'https://example.com/img2.jpg',
     link: 'https://example.com/prod2',
     color: 'Beyaz',
     size: '38',
-    productType: 'Sneakers',
-    description: 'Klasik chunky sneakers',
+    productType: 'Koşu Ayakkabısı',
+    description: 'Yüksek performanslı koşu ayakkabısı',
     availability: 'in stock',
   },
   {
-    id: 'nike-001',
-    title: 'Nike Air Max Siyah Erkek Spor Ayakkabı',
-    brand: 'Nike',
-    price: '2499.99 TL',
-    salePrice: '1999.99 TL',
+    id: 'asics-001',
+    title: 'ASICS Gel-Rocket 12 Mavi Kadın Voleybol Ayakkabısı',
+    brand: 'ASICS',
+    price: '3249.35 TL',
+    salePrice: '2499.50 TL',
     imageLink: 'https://example.com/img3.jpg',
     link: 'https://example.com/prod3',
-    color: 'Siyah',
-    size: '43',
-    productType: 'Spor Ayakkabı',
-    description: 'Hava yastıklı koşu ayakkabısı',
-    availability: 'out of stock',
+    color: 'Mavi',
+    size: '37',
+    productType: 'Voleybol Ayakkabısı',
+    description: 'Profesyonel voleybol ayakkabısı',
+    availability: 'in stock',
   },
   {
-    id: 'adidas-001',
-    title: 'Adidas Ultraboost Mavi Erkek Koşu Ayakkabısı',
-    brand: 'Adidas',
-    price: '2799.99 TL',
+    id: 'saucony-001',
+    title: 'SAUCONY Endorphin Pro 4 Beyaz Kadın Koşu Ayakkabısı',
+    brand: 'SAUCONY',
+    price: '15999.99 TL',
+    salePrice: '11199.99 TL',
     imageLink: 'https://example.com/img4.jpg',
     link: 'https://example.com/prod4',
-    color: 'Mavi',
-    size: '43',
+    color: 'Beyaz',
+    size: '39',
     productType: 'Koşu Ayakkabısı',
-    description: 'Boost teknolojili koşu ayakkabısı',
+    description: 'Karbon plakalı maraton ayakkabısı',
     availability: 'in stock',
   },
 ];
@@ -64,7 +65,7 @@ const mockProducts: Product[] = [
 // Mock product signals
 const mockSignals = [
   {
-    productId: 'ske-001',
+    productId: 'hoka-001',
     viewCount: 2500,
     clickCount: 450,
     purchaseCount: 85,
@@ -73,7 +74,7 @@ const mockSignals = [
     avgRating: 4.7,
   },
   {
-    productId: 'ske-002',
+    productId: 'on-001',
     viewCount: 1800,
     clickCount: 320,
     purchaseCount: 60,
@@ -82,16 +83,16 @@ const mockSignals = [
     avgRating: 4.5,
   },
   {
-    productId: 'nike-001',
+    productId: 'asics-001',
     viewCount: 3200,
     clickCount: 580,
     purchaseCount: 120,
     addedDate: new Date('2023-11-15'),
-    stockQuantity: 0, // Stokta yok
+    stockQuantity: 50,
     avgRating: 4.9,
   },
   {
-    productId: 'adidas-001',
+    productId: 'saucony-001',
     viewCount: 1200,
     clickCount: 200,
     purchaseCount: 35,
@@ -117,17 +118,17 @@ async function runTests() {
   console.log('Results:', results1.map(p => ({ id: p.id, title: p.title, brand: p.brand })));
   console.log('');
 
-  // Test 2: Brand boost (Skechers campaign)
-  console.log('📊 Test 2: Skechers Campaign (Brand Boost)');
+  // Test 2: Brand boost (HOKA campaign - High5 marketplace)
+  console.log('📊 Test 2: HOKA Campaign (Brand Boost)');
   const merchandising = searchService.getMerchandisingEngine();
   merchandising.updateConfig({
     brandBoosts: new Map([
-      ['skechers', 8.0],
+      ['hoka', 8.0],  // HOKA markasını güçlü boost
     ]),
   });
-  const results2 = await searchService.search('siyah spor ayakkabı', 10);
+  const results2 = await searchService.search('koşu ayakkabısı', 10);
   console.log('Results:', results2.map(p => ({ id: p.id, title: p.title, brand: p.brand })));
-  console.log('Expected: Skechers products should be ranked higher');
+  console.log('Expected: HOKA products should be ranked higher');
   console.log('');
 
   // Test 3: Popularity focused

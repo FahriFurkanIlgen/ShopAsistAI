@@ -86,7 +86,7 @@ export class QueryParserService {
         messages: [
           {
             role: 'system',
-            content: `You are a product search query parser for a Turkish e-commerce site (Skechers Turkey).
+            content: `You are a product search query parser for a Turkish e-commerce site (High5 Turkey).
 Extract structured attributes from user queries.
 
 Output ONLY valid JSON with this exact structure:
@@ -100,9 +100,9 @@ Output ONLY valid JSON with this exact structure:
 }
 
 Rules:
-1. Extract brand names (Skechers, Nike, Adidas, etc.)
+1. Extract brand names (HOKA, ON, ASICS, Saucony, Salomon, Brooks, Skechers, Nike, Adidas, etc.)
 2. Extract colors in Turkish (beyaz, siyah, kırmızı, mavi, etc.)
-3. Extract categories (sneaker, bot, spor ayakkabı, etc.)
+3. Extract categories (sneaker, bot, spor ayakkabı, ceket, tayt, şort, elbise, etc.)
 4. Extract sizes (43 numara → "43", 42.5 → "42.5")
 5. Extract price ranges (1000-2000 lira → {"min": 1000, "max": 2000})
 6. Extract relevant keywords (rahat, şık, günlük, etc.)

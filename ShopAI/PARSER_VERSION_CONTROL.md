@@ -16,17 +16,17 @@ Artık 3 farklı query parser versiyonu arasında **runtime'da** kolayca geçiş
 
 ```bash
 # v1: Regex-only (default)
-curl -X POST http://localhost:3000/api/config/parser-version/skechers-tr \
+curl -X POST http://localhost:3000/api/config/parser-version/high5-tr \
   -H "Content-Type: application/json" \
   -d '{"version": "v1"}'
 
 # v2: Hybrid (ÖNERİLEN)
-curl -X POST http://localhost:3000/api/config/parser-version/skechers-tr \
+curl -X POST http://localhost:3000/api/config/parser-version/high5-tr \
   -H "Content-Type: application/json" \
   -d '{"version": "v2"}'
 
 # v3: AI-only
-curl -X POST http://localhost:3000/api/config/parser-version/skechers-tr \
+curl -X POST http://localhost:3000/api/config/parser-version/high5-tr \
   -H "Content-Type: application/json" \
   -d '{"version": "v3"}'
 ```
@@ -34,13 +34,13 @@ curl -X POST http://localhost:3000/api/config/parser-version/skechers-tr \
 ### 2. Mevcut Versiyonu Öğren
 
 ```bash
-curl http://localhost:3000/api/config/parser-version/skechers-tr
+curl http://localhost:3000/api/config/parser-version/high5-tr
 ```
 
 **Response:**
 ```json
 {
-  "siteId": "skechers-tr",
+  "siteId": "high5-tr",
   "version": "v2",
   "info": {
     "version": "v2",
@@ -81,7 +81,7 @@ curl http://localhost:3000/api/config/parser-info
 curl -X POST http://localhost:3000/api/chat \
   -H "Content-Type: application/json" \
   -d '{
-    "siteId": "skechers-tr",
+    "siteId": "high5-tr",
     "message": "beyaz 43 numara sneaker"
   }'
 ```
@@ -100,7 +100,7 @@ curl -X POST http://localhost:3000/api/chat \
 curl -X POST http://localhost:3000/api/chat \
   -H "Content-Type: application/json" \
   -d '{
-    "siteId": "skechers-tr",
+    "siteId": "high5-tr",
     "message": "yaklaşık 2000 lira civarında rahat günlük spor ayakkabı"
   }'
 ```
@@ -122,14 +122,14 @@ import { CacheService } from './services/cacheService';
 const cacheService = CacheService.getInstance();
 
 // Parser versiyonunu değiştir
-cacheService.setParserVersion('skechers-tr', 'v2');
+cacheService.setParserVersion('high5-tr', 'v2');
 
 // Mevcut versiyonu öğren
-const version = cacheService.getParserVersion('skechers-tr');
+const version = cacheService.getParserVersion('high5-tr');
 console.log(`Current version: ${version}`); // "v2"
 
 // Arama yap (otomatik olarak seçili versiyonu kullanır)
-const results = await cacheService.hybridSearch('skechers-tr', 'beyaz 43 numara', 10);
+const results = await cacheService.hybridSearch('high5-tr', 'beyaz 43 numara', 10);
 ```
 
 ---
@@ -151,11 +151,11 @@ interface WidgetConfig {
 ### Config Güncelleme
 
 ```bash
-curl -X POST http://localhost:3000/api/config/skechers-tr \
+curl -X POST http://localhost:3000/api/config/high5-tr \
   -H "Content-Type: application/json" \
   -d '{
-    "siteId": "skechers-tr",
-    "siteName": "Skechers Turkey",
+    "siteId": "high5-tr",
+    "siteName": "High5 Turkey",
     "queryParserVersion": "v2",
     "primaryColor": "#000000",
     "secondaryColor": "#e31e24"
@@ -249,7 +249,7 @@ OPENAI_API_KEY=sk-...
 ### 1. Başlangıç: v1
 ```bash
 # İlk 1-2 hafta v1 ile başla
-curl -X POST .../parser-version/skechers-tr -d '{"version": "v1"}'
+curl -X POST .../parser-version/high5-tr -d '{"version": "v1"}'
 ```
 
 ### 2. A/B Test: v1 vs v2
@@ -262,7 +262,7 @@ cacheService.setParserVersion(siteId, version);
 ### 3. Production: v2
 ```bash
 # Sonuçlar iyiyse v2'ye geç
-curl -X POST .../parser-version/skechers-tr -d '{"version": "v2"}'
+curl -X POST .../parser-version/high5-tr -d '{"version": "v2"}'
 ```
 
 ---

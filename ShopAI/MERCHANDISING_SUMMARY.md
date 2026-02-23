@@ -53,7 +53,7 @@ Arama sisteminize **profesyonel seviyede merchandising özellikleri** ekledik. A
 
 ```typescript
 brandBoosts: Map([
-  ['skechers', 5.0],   // Skechers kampanyası
+  ['high5', 5.0],   // High5 kampanyası
   ['nike', 3.0],       // Nike kampanyası
 ])
 
@@ -146,7 +146,7 @@ pinnedProducts: Map([
 ### 📊 Senaryo 1: Flash Sale Kampanya
 
 ```typescript
-POST /api/merchandising/config/skechers-tr
+POST /api/merchandising/config/high5-tr
 {
   "signalWeights": {
     "priceCompetitiveness": 0.20  // İndirimleri öne çıkar
@@ -164,33 +164,33 @@ POST /api/merchandising/config/skechers-tr
 
 ---
 
-### 🏷️ Senaryo 2: Marka Kampanyası (Skechers)
+### 🏷️ Senaryo 2: Marka Kampanyası (High5)
 
 ```typescript
-POST /api/merchandising/brand-boost/skechers-tr
+POST /api/merchandising/brand-boost/high5-tr
 {
   "brandBoosts": {
-    "skechers": 8.0  // Çok güçlü boost
+    "high5": 8.0  // Çok güçlü boost
   }
 }
 
-POST /api/merchandising/pinned-products/skechers-tr
+POST /api/merchandising/pinned-products/high5-tr
 {
   "pinnedProducts": {
-    "0": "skechers-featured-001",
-    "1": "skechers-featured-002"
+    "0": "high5-featured-001",
+    "1": "high5-featured-002"
   }
 }
 ```
 
-**Sonuç:** Skechers ürünleri her zaman üstte.
+**Sonuç:** High5 ürünleri her zaman üstte.
 
 ---
 
 ### 📦 Senaryo 3: Stok Temizleme
 
 ```typescript
-POST /api/merchandising/config/skechers-tr
+POST /api/merchandising/config/high5-tr
 {
   "signalWeights": {
     "recency": 0.25,              // Eski ürünleri öne çıkar
@@ -211,7 +211,7 @@ POST /api/merchandising/config/skechers-tr
 ### 🔥 Senaryo 4: Popülerlik Odaklı
 
 ```typescript
-POST /api/merchandising/weights/skechers-tr
+POST /api/merchandising/weights/high5-tr
 {
   "weights": {
     "textRelevance": 0.25,
@@ -232,7 +232,7 @@ POST /api/merchandising/weights/skechers-tr
 ### 🆕 Senaryo 5: Yeni Ürün Lansmanı
 
 ```typescript
-POST /api/merchandising/config/skechers-tr
+POST /api/merchandising/config/high5-tr
 {
   "signalWeights": {
     "recency": 0.20          // Yeni ürün boost artır
@@ -309,7 +309,7 @@ const merchandising = searchService.getMerchandisingEngine();
 
 // Marka kampanyası
 merchandising.updateConfig({
-  brandBoosts: new Map([['skechers', 5.0]]),
+  brandBoosts: new Map([['high5', 5.0]]),
 });
 ```
 
@@ -324,12 +324,12 @@ const results = searchService.search('siyah spor ayakkabı', 10);
 
 ```bash
 # Kampanya başlat
-curl -X POST http://localhost:3000/api/merchandising/brand-boost/skechers-tr \
+curl -X POST http://localhost:3000/api/merchandising/brand-boost/high5-tr \
   -H "Content-Type: application/json" \
-  -d '{"brandBoosts": {"skechers": 5.0}}'
+  -d '{"brandBoosts": {"high5": 5.0}}'
 
 # Sonuçları gör
-curl http://localhost:3000/api/search/skechers-tr?q=ayakkabı
+curl http://localhost:3000/api/search/high5-tr?q=ayakkabı
 ```
 
 ---

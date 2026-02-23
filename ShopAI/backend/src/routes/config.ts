@@ -11,13 +11,13 @@ const tenantService = TenantService.getInstance();
 // In-memory config storage (in production, this would be in a database)
 const siteConfigs: Map<string, WidgetConfig> = new Map();
 
-// Initialize default config for skechers
-const defaultSkechersConfig: WidgetConfig = {
-  siteId: 'skechers-tr',
-  siteName: process.env.SITE_NAME || 'Skechers Türkiye',
+// Initialize default config for high5
+const defaultHigh5Config: WidgetConfig = {
+  siteId: 'high5-tr',
+  siteName: process.env.SITE_NAME || 'High5 Türkiye',
   primaryColor: '#000000',
   secondaryColor: '#e31e24',
-  welcomeMessage: "Merhaba, Skechers koleksiyonunda aradığınızı hızlıca bulalım.",
+  welcomeMessage: "Merhaba, High5 koleksiyonunda aradığınızı hızlıca bulalım.",
   welcomeSubtext: 'Yeni sezon, kombinasyon önerileri ve sipariş desteği.',
   categories: [
     { id: 'men', name: 'Erkek', emoji: '👨', keywords: ['erkek', 'men', 'male'] },
@@ -26,14 +26,14 @@ const defaultSkechersConfig: WidgetConfig = {
     { id: 'sports', name: 'Spor', emoji: '⚽', keywords: ['sport', 'spor', 'athletic', 'running'] },
     { id: 'casual', name: 'Günlük', emoji: '👞', keywords: ['casual', 'günlük', 'lifestyle'] },
   ],
-  privacyPolicyUrl: 'https://www.skechers.com.tr/privacy-policy',
+  privacyPolicyUrl: 'https://www.high5.com.tr/privacy-policy',
   brandingText: 'Powered by ShopAsistAI',
   showBranding: true,
   queryParserVersion: 'v1', // Default to regex-only
 };
 
-siteConfigs.set('skechers-tr', defaultSkechersConfig);
-cacheService.setSiteConfig(defaultSkechersConfig);
+siteConfigs.set('high5-tr', defaultHigh5Config);
+cacheService.setSiteConfig(defaultHigh5Config);
 
 // GET /api/config/:siteId - Get widget configuration
 // Optionally authenticated - uses tenant config if API key provided

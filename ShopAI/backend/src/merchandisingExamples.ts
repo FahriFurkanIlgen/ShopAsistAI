@@ -52,9 +52,10 @@ export function boostCampaignBrands(searchService: SearchService) {
   
   const config: Partial<MerchandisingConfig> = {
     brandBoosts: new Map([
-      ['skechers', 5.0],    // Skechers'ı güçlü boost
-      ['nike', 3.0],        // Nike'yı orta boost
-      ['adidas', 2.0],      // Adidas'ı hafif boost
+      ['hoka', 5.0],        // HOKA'yı güçlü boost (High5 marketplace)
+      ['on', 4.0],          // ON'u güçlü boost
+      ['asics', 3.0],       // ASICS'i orta boost
+      ['saucony', 2.0],     // Saucony'yi hafif boost
     ]),
   };
 
