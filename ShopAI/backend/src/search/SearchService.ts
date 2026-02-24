@@ -12,6 +12,7 @@ import type { QueryParserVersion } from '../../../shared/types/config';
 import { SimpleCache } from '../services/simpleCache';
 import { QueryAnalyzer } from './QueryAnalyzer';
 import { SKUMatcher } from './SKUMatcher';
+import { graphService } from '../services/graphService';
 
 export class SearchService {
   private index: InvertedIndex;
@@ -432,4 +433,70 @@ export class SearchService {
       cacheStats: this.searchCache.getStats(),
     };
   }
+
+  /**
+   * Get graph-based recommendations for a product
+   * Enriches search results with related products from GraphDB
+   */
+  async getGraphRecommendations(productId: string, limit: number = 5): Promise<Product[]> {
+    if (!graphService.isServiceConnected()) {
+      return [];
+    }
+
+    try {
+      const recommendations = await graphService.getRecommendations(productId, limit);
+      return recommendations.map(r => r.product);
+    } catch (error) {
+      console.error('[SearchService] Error getting graph recommendations:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Enrich search results with graph-based similar products
+   * Adds a 'recommendations' field to each product
+   */
+  async enrichWithGraphData(products: Product[], recommendationsPerProduct: number = 3): Promise<any[]> {
+    if (!graphService.isServiceConnected() || products.length === 0) {
+      return products;
+    }
+
+    try {
+      const enrichedProducts = await Promise.all(
+        products.map(async (product) => {
+          const recommendations = await this.getGraphRecommendations(product.id, recommendationsPerProduct);
+          return {
+            ...product,
+            graphRecommendations: recommendations,
+            hasGraphData: recommendations.length > 0
+          };
+        })
+      );
+
+      return enrichedProducts;
+    } catch (error) {
+      console.error('[SearchService] Error enriching with graph data:', error);
+      return products;
+    }
+  }
+
+  /**
+   * Hybrid search: Combine text search with graph traversal
+   * Uses both BM25 and GraphDB relationships for better recommendations
+   */
+  async hybridGraphSearch(query: string, topK: number = 10): Promise<any[]> {
+    // First, get regular search results
+    const textResults = await this.search(query, topK);
+    
+    // If no GraphDB connection, return regular results
+    if (!graphService.isServiceConnected()) {
+      return textResults;
+    }
+
+    // Enrich with graph recommendations
+    const enriched = await this.enrichWithGraphData(textResults, 3);
+    
+    return enriched;
+  }
 }
+

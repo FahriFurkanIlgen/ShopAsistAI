@@ -151,6 +151,27 @@ export class CacheService {
     return feed?.products;
   }
 
+  /**
+   * Get all products from all sites (for GraphDB sync)
+   */
+  public getAllProducts(): Product[] {
+    const allProducts: Product[] = [];
+    const keys = this.cache.keys();
+    
+    // Get all feed keys
+    const feedKeys = keys.filter(key => key.startsWith('feed:'));
+    
+    for (const key of feedKeys) {
+      const feed = this.get<GoogleFeed>(key);
+      if (feed && feed.products) {
+        allProducts.push(...feed.products);
+      }
+    }
+    
+    console.log(`[CacheService] getAllProducts: Found ${allProducts.length} products from ${feedKeys.length} sites`);
+    return allProducts;
+  }
+
   public searchProducts(siteId: string, query: string): Product[] {
     const products = this.getProducts(siteId);
     if (!products || !query) return [];

@@ -22,6 +22,7 @@ E-ticaret siteleri için yapay zeka destekli alışveriş asistanı widget'ı. G
 - ✅ **Google Shopping Feed Entegrasyonu**: XML/RSS formatında ürün feed'lerini otomatik olarak parse eder
 - ✅ **Gelişmiş Arama Motoru**: BM25 + Hybrid search ile text ve attribute matching
 - ✅ **Search Merchandising**: Popülerlik, stok, yeni ürün, kampanya bazlı dinamik ranking
+- ✅ **GraphDB Entegrasyonu**: Neo4j ile ilişki tabanlı ürün önerileri
 - ✅ **Akıllı Önbellek Sistemi**: Ürün verilerini 1 saat boyunca cache'de tutar
 - ✅ **Otomatik Güncelleme**: Her saat başında ürün verilerini otomatik olarak yeniler
 - ✅ **AI Destekli Sohbet**: OpenAI GPT-4 ile doğal dil kullanarak ürün önerileri
@@ -450,7 +451,62 @@ curl -X POST http://localhost:3000/api/chat \
 - `.env` dosyasında `ALLOWED_ORIGINS` ayarını kontrol edin
 - Frontend'in çalıştığı portu origins listesine ekleyin
 
-## 📝 Lisans
+## � GraphDB (Neo4j) Entegrasyonu
+
+ShopAsistAI artık **Neo4j graf veritabanı** desteği ile gelişmiş ürün önerileri sunuyor!
+
+### Özellikler
+- 🔗 **İlişki Tabanlı Öneriler**: Benzer ürünler, aynı kategori, aynı marka
+- 🎯 **Multi-hop Öneriler**: 2 adım uzaklıktaki ürünler (arkadaşının arkadaşı mantığı)
+- 💰 **Fiyat Benzerliği**: Benzer fiyat aralığındaki ürünler
+- ⚡ **Hızlı Sorgular**: JOIN'siz graf traversal ile milisaniye düzeyinde yanıt
+
+### Hızlı Başlangıç
+
+1. **Neo4j Docker ile başlat:**
+```bash
+docker run --name neo4j-shopassist \
+  -p 7474:7474 -p 7687:7687 \
+  -e NEO4J_AUTH=neo4j/shopassist123 \
+  -d neo4j:latest
+```
+
+2. **`.env` dosyasını yapılandır:**
+```env
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USERNAME=neo4j
+NEO4J_PASSWORD=shopassist123
+NEO4J_ENABLED=true
+```
+
+3. **Sunucuyu başlat:**
+```bash
+npm run dev
+```
+
+### API Endpoints
+
+```bash
+# Ürün önerileri al
+curl http://localhost:3000/api/recommendations/PROD123?limit=5
+
+# Benzer ürünler (multi-hop)
+curl http://localhost:3000/api/recommendations/PROD123/similar?limit=5
+
+# Kategoriye göre ürünler
+curl http://localhost:3000/api/recommendations/category/Shoes?limit=10
+
+# GraphDB istatistikleri
+curl http://localhost:3000/api/recommendations/stats
+
+# Manuel senkronizasyon
+curl -X POST http://localhost:3000/api/recommendations/sync
+```
+
+### Detaylı Bilgi
+GraphDB kurulumu, kullanımı ve Cypher sorguları için [GraphDB Rehberi](./docs/guides/GRAPHDB_GUIDE.md) dosyasına bakın.
+
+## �📝 Lisans
 
 ISC
 

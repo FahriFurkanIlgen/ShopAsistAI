@@ -8,8 +8,10 @@ import configRouter from './routes/config';
 import searchRouter from './routes/search';
 import merchandisingRouter from './routes/merchandising';
 import tenantsRouter from './routes/tenants';
+import recommendationsRouter from './routes/recommendations';
 import { FeedParserService } from './services/feedParser';
 import { CacheService } from './services/cacheService';
+import { graphService } from './services/graphService';
 
 // Load environment variables
 dotenv.config();
@@ -66,6 +68,7 @@ app.use('/api/config', configRouter);
 app.use('/api/search', searchRouter);
 app.use('/api/merchandising', merchandisingRouter);
 app.use('/api/tenants', tenantsRouter);
+app.use('/api/recommendations', recommendationsRouter);
 
 // Health check
 app.get('/health', (_req: Request, res: Response) => {
@@ -77,6 +80,60 @@ app.get('/health', (_req: Request, res: Response) => {
   });
 });
 
+// Initialize GraphDB
+const initializeGraphDB = async () => {
+  // Check if GraphDB is enabled
+  if (process.env.NEO4J_ENABLED !== 'true') {
+    console.log('ℹ️  GraphDB is disabled. Set NEO4J_ENABLED=true to enable.');
+    return;
+  }
+
+  try {
+    console.log('🔗 Connecting to Neo4j GraphDB...');
+    await graphService.connect();
+    await graphService.initializeSchema();
+    
+    const stats = await graphService.getStatistics();
+    console.log(`📊 GraphDB Stats: ${stats.totalProducts} products, ${stats.totalRelationships} relationships`);
+  } catch (error) {
+    console.warn('⚠️  GraphDB not available:', error instanceof Error ? error.message : error);
+    console.log('   Continuing without GraphDB features...');
+  }
+};
+
+// Sync products to GraphDB
+const syncProductsToGraph = async () => {
+  if (process.env.NEO4J_ENABLED !== 'true' || !graphService.isServiceConnected()) {
+    return;
+  }
+
+  try {
+    console.log('🔄 Syncing products to GraphDB...');
+    const products = cacheService.getAllProducts();
+    
+    if (products.length === 0) {
+      console.log('⚠️  No products to sync');
+      return;
+    }
+
+    // Import products to graph
+    await graphService.importProducts(products);
+    
+    // Create relationships
+    console.log('🔗 Creating product relationships...');
+    await Promise.all([
+      graphService.createCategoryRelationships(),
+      graphService.createBrandRelationships(),
+      graphService.createPriceSimilarityRelationships()
+    ]);
+
+    const stats = await graphService.getStatistics();
+    console.log(`✅ GraphDB sync complete: ${stats.totalProducts} products, ${stats.totalRelationships} relationships`);
+  } catch (error) {
+    console.error('❌ Error syncing to GraphDB:', error);
+  }
+};
+
 // Initialize feeds on startup
 const initializeFeeds = async () => {
   console.log('🚀 Initializing product feeds...');
@@ -87,6 +144,9 @@ const initializeFeeds = async () => {
     if (feedUrl) {
       await feedParserService.parseFeed('high5', siteName, feedUrl);
       console.log('✅ Product feeds initialized successfully');
+      
+      // Sync to GraphDB if enabled
+      await syncProductsToGraph();
     } else {
       console.warn('⚠️  No feed URL configured. Set HIGH5_FEED_URL in .env');
     }
@@ -107,8 +167,20 @@ app.listen(PORT, async () => {
   console.log(`🛍️  ShopAsistAI server running on port ${PORT}`);
   console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
   
+  // Initialize GraphDB connection
+  await initializeGraphDB();
+  
   // Initialize feeds on startup
   await initializeFeeds();
+});
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  console.log('SIGTERM signal received: closing HTTP server');
+  if (graphService.isServiceConnected()) {
+    await graphService.disconnect();
+  }
+  process.exit(0);
 });
 
 export default app;

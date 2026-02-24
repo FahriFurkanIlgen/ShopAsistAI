@@ -569,13 +569,7 @@
               <div class="quick-action-icon">🏃</div>
               <div class="quick-action-title">Koşu Ayakkabısı</div>
               <div class="quick-action-desc">Yüksek performanslı koşu ayakkabıları</div>
-            </div>
-            
-            <div class="quick-action" onclick="sendQuickMessage('2000-3000 TL arası spor ayakkabı')">
-              <div class="quick-action-icon">💰</div>
-              <div class="quick-action-title">Bütçeye Uygun</div>
-              <div class="quick-action-desc">Fiyat aralığında ürün önerileri</div>
-            </div>
+            </div>          
             
             <div class="quick-action" onclick="sendQuickMessage('ON marka kadın ayakkabısı')">
               <div class="quick-action-icon">⭐</div>
@@ -708,7 +702,7 @@
 
       const avatar = document.createElement('div');
       avatar.className = `avatar ${type}-avatar`;
-      avatar.textContent = type === 'user' ? '👤' : 'AI';
+      avatar.textContent = type === 'user' ? '👟' : 'AI';
 
       const contentDiv = document.createElement('div');
       contentDiv.className = 'message-content';
