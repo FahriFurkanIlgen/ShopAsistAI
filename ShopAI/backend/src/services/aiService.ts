@@ -1,15 +1,19 @@
 import OpenAI from 'openai';
-import { ChatMessage, ChatRequest, ChatResponse, Product } from '../../../shared/types';
+import { ChatMessage, ChatRequest, ChatResponse, Product, UserIntent, CheckoutStep } from '../../../shared/types';
 import { CacheService } from './cacheService';
 import { SimpleCache } from './simpleCache';
+import { CartService } from './cartService';
+import { IntentRecognitionService } from './intentService';
 import { extractSize, extractBrand, extractColor, extractGender, normalizeTurkish } from '../search/utils';
 
 export class AIService {
   private openai: OpenAI;
   private cacheService: CacheService;
   private responseCache: SimpleCache<ChatResponse>;
+  private cartService: CartService;
+  private intentService: IntentRecognitionService;
 
-  constructor(cacheService: CacheService) {
+  constructor(cacheService: CacheService, cartService?: CartService) {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       throw new Error('OPENAI_API_KEY is not configured');
@@ -18,12 +22,56 @@ export class AIService {
     this.openai = new OpenAI({ apiKey });
     this.cacheService = cacheService;
     this.responseCache = new SimpleCache<ChatResponse>(500, 300000); // Cache 500 responses for 5 min
+    this.cartService = cartService || new CartService();
+    this.intentService = new IntentRecognitionService();
   }
 
   async chat(request: ChatRequest): Promise<ChatResponse> {
     try {
       const { siteId, message, conversationHistory = [] } = request;
 
+      // Generate session ID from conversation (use first user message timestamp or create new)
+      const sessionId = this.getSessionId(conversationHistory);
+
+      // STEP 1: Detect user intent
+      const intent = this.intentService.detectIntent(message, conversationHistory);
+      console.log(`[AIService] Detected intent: ${intent}`);
+
+      // STEP 2: Handle cart-related intents
+      if (intent === UserIntent.VIEW_CART) {
+        return this.handleViewCart(sessionId, siteId, message, conversationHistory);
+      }
+
+      if (intent === UserIntent.ADD_TO_CART) {
+        return this.handleAddToCart(sessionId, siteId, message, conversationHistory);
+      }
+
+      if (intent === UserIntent.REMOVE_FROM_CART) {
+        return this.handleRemoveFromCart(sessionId, siteId, message, conversationHistory);
+      }
+
+      // STEP 3: Handle checkout-related intents
+      if (intent === UserIntent.CHECKOUT_INIT) {
+        return this.handleCheckoutInit(sessionId, siteId, message, conversationHistory);
+      }
+
+      if (intent === UserIntent.PROVIDE_ADDRESS) {
+        return this.handleProvideAddress(sessionId, siteId, message, conversationHistory);
+      }
+
+      if (intent === UserIntent.PROVIDE_PAYMENT) {
+        return this.handleProvidePayment(sessionId, siteId, message, conversationHistory);
+      }
+
+      if (intent === UserIntent.CONFIRM_ORDER) {
+        return this.handleConfirmOrder(sessionId, siteId, message, conversationHistory);
+      }
+
+      if (intent === UserIntent.TRACK_ORDER) {
+        return this.handleTrackOrder(sessionId, siteId, message, conversationHistory);
+      }
+
+      // STEP 4: Continue with normal product search flow
       // Check for irrelevant queries first
       const irrelevantResponse = this.checkIrrelevantQuery(message, siteId, conversationHistory);
       if (irrelevantResponse) {
@@ -1451,5 +1499,513 @@ Başka ürün önerileri görmek ister misiniz?"`;
       const sizeDiff = Math.abs(productSizeNum - querySizeNum);
       return sizeDiff <= tolerance;
     });
+  }
+
+  // ============================================================================
+  // CART & CHECKOUT HANDLERS
+  // ============================================================================
+
+  /**
+   * Generate session ID from conversation history
+   */
+  private getSessionId(conversationHistory: ChatMessage[]): string {
+    if (conversationHistory.length > 0) {
+      // Use first message timestamp as session identifier
+      const firstMessage = conversationHistory[0];
+      return `session_${firstMessage.timestamp.getTime()}`;
+    }
+    return `session_${Date.now()}`;
+  }
+
+  /**
+   * Handle VIEW_CART intent
+   */
+  private async handleViewCart(
+    sessionId: string,
+    _siteId: string,
+    message: string,
+    conversationHistory: ChatMessage[]
+  ): Promise<ChatResponse> {
+    const cartSummary = this.cartService.getCartSummary(sessionId);
+
+    let aiMessage: string;
+    if (cartSummary.itemCount === 0) {
+      aiMessage = 'Sepetiniz şu anda boş. Size hangi ürünleri önerebilirim?';
+    } else {
+      aiMessage = `Sepetinizde ${cartSummary.itemCount} ürün var:\n\n`;
+      cartSummary.items.forEach((item, index) => {
+        aiMessage += `${index + 1}. ${item.title}`;
+        if (item.size) aiMessage += ` (${item.size})`;
+        if (item.color) aiMessage += ` - ${item.color}`;
+        aiMessage += ` - ${item.quantity} adet - ${item.price.toFixed(2)} TL\n`;
+      });
+      aiMessage += `\n**Toplam: ${cartSummary.totalPrice.toFixed(2)} TL**\n\n`;
+      aiMessage += `Satın almak için "Satın al" diyebilir veya başka ürünlere göz atabilirsiniz.`;
+    }
+
+    const updatedHistory: ChatMessage[] = [
+      ...conversationHistory,
+      { role: 'user', content: message, timestamp: new Date() },
+      { role: 'assistant', content: aiMessage, timestamp: new Date() },
+    ];
+
+    return {
+      message: aiMessage,
+      cart: cartSummary,
+      conversationHistory: updatedHistory,
+      debug: {
+        originalQuery: message,
+        enhancedQuery: 'View Cart',
+        isFollowUp: false,
+        intent: UserIntent.VIEW_CART,
+      },
+    };
+  }
+
+  /**
+   * Handle ADD_TO_CART intent
+   */
+  private async handleAddToCart(
+    sessionId: string,
+    siteId: string,
+    message: string,
+    conversationHistory: ChatMessage[]
+  ): Promise<ChatResponse> {
+    // Extract product reference from message
+    const productRef = this.intentService.extractProductReference(message);
+    const quantity = this.intentService.extractQuantity(message);
+
+    // Find the product to add
+    let productToAdd: Product | null = null;
+
+    // Check if message references a recent recommendation
+    if (productRef.index !== undefined) {
+      // Find last assistant message with recommended products
+      for (let i = conversationHistory.length - 1; i >= 0; i--) {
+        if (conversationHistory[i].role === 'assistant') {
+          // This is a simplified approach - in real implementation,
+          // you'd need to track recommended products per message
+          // For now, get products from cache
+          const products = this.cacheService.getProducts(siteId);
+          if (products && products.length > productRef.index) {
+            productToAdd = products[productRef.index];
+            break;
+          }
+        }
+      }
+    }
+
+    if (!productToAdd) {
+      const aiMessage = 'Hangi ürünü sepete eklemek istersiniz? Ürün numarasını veya ismini belirtir misiniz?';
+      const updatedHistory: ChatMessage[] = [
+        ...conversationHistory,
+        { role: 'user', content: message, timestamp: new Date() },
+        { role: 'assistant', content: aiMessage, timestamp: new Date() },
+      ];
+      return {
+        message: aiMessage,
+        conversationHistory: updatedHistory,
+        debug: {
+          originalQuery: message,
+          enhancedQuery: 'Add to Cart - Product Not Found',
+          isFollowUp: false,
+          intent: UserIntent.ADD_TO_CART,
+        },
+      };
+    }
+
+    // Add to cart
+    this.cartService.addToCart(sessionId, siteId, productToAdd, quantity);
+    const cartSummary = this.cartService.getCartSummary(sessionId);
+
+    const aiMessage = `✅ ${productToAdd.title} sepetinize eklendi! (${quantity} adet)\n\n` +
+      `Sepetinizde toplam ${cartSummary.itemCount} ürün var. Toplam: ${cartSummary.totalPrice.toFixed(2)} TL\n\n` +
+      `Başka bir ürün eklemek ister misiniz yoksa satın almaya devam edelim mi?`;
+
+    const updatedHistory: ChatMessage[] = [
+      ...conversationHistory,
+      { role: 'user', content: message, timestamp: new Date() },
+      { role: 'assistant', content: aiMessage, timestamp: new Date() },
+    ];
+
+    return {
+      message: aiMessage,
+      cart: cartSummary,
+      recommendedProducts: [productToAdd],
+      conversationHistory: updatedHistory,
+      debug: {
+        originalQuery: message,
+        enhancedQuery: `Add to Cart: ${productToAdd.title}`,
+        isFollowUp: false,
+        intent: UserIntent.ADD_TO_CART,
+      },
+    };
+  }
+
+  /**
+   * Handle REMOVE_FROM_CART intent
+   */
+  private async handleRemoveFromCart(
+    sessionId: string,
+    siteId: string,
+    message: string,
+    conversationHistory: ChatMessage[]
+  ): Promise<ChatResponse> {
+    const productRef = this.intentService.extractProductReference(message);
+    
+    // Simple implementation - in production, you'd match products more intelligently
+    const cart = this.cartService.getCart(sessionId, siteId);
+    
+    if (cart.items.length === 0) {
+      const aiMessage = 'Sepetinizde zaten ürün yok.';
+      const updatedHistory: ChatMessage[] = [
+        ...conversationHistory,
+        { role: 'user', content: message, timestamp: new Date() },
+        { role: 'assistant', content: aiMessage, timestamp: new Date() },
+      ];
+      return {
+        message: aiMessage,
+        conversationHistory: updatedHistory,
+      };
+    }
+
+    // Remove first item if no specific reference (simplified)
+    const itemToRemove = cart.items[productRef.index || 0];
+    this.cartService.removeFromCart(
+      sessionId,
+      itemToRemove.product.id,
+      itemToRemove.selectedSize,
+      itemToRemove.selectedColor
+    );
+
+    const cartSummary = this.cartService.getCartSummary(sessionId);
+    const aiMessage = `${itemToRemove.product.title} sepetinizden çıkarıldı.\n\n` +
+      (cartSummary.itemCount > 0
+        ? `Sepetinizde ${cartSummary.itemCount} ürün kaldı. Toplam: ${cartSummary.totalPrice.toFixed(2)} TL`
+        : 'Sepetiniz artık boş.');
+
+    const updatedHistory: ChatMessage[] = [
+      ...conversationHistory,
+      { role: 'user', content: message, timestamp: new Date() },
+      { role: 'assistant', content: aiMessage, timestamp: new Date() },
+    ];
+
+    return {
+      message: aiMessage,
+      cart: cartSummary,
+      conversationHistory: updatedHistory,
+      debug: {
+        originalQuery: message,
+        enhancedQuery: 'Remove from Cart',
+        isFollowUp: false,
+        intent: UserIntent.REMOVE_FROM_CART,
+      },
+    };
+  }
+
+  /**
+   * Handle CHECKOUT_INIT intent
+   */
+  private async handleCheckoutInit(
+    sessionId: string,
+    _siteId: string,
+    message: string,
+    conversationHistory: ChatMessage[]
+  ): Promise<ChatResponse> {
+    const cartSummary = this.cartService.getCartSummary(sessionId);
+
+    if (cartSummary.itemCount === 0) {
+      const aiMessage = 'Sepetiniz boş. Önce ürün eklemeniz gerekiyor.';
+      const updatedHistory: ChatMessage[] = [
+        ...conversationHistory,
+        { role: 'user', content: message, timestamp: new Date() },
+        { role: 'assistant', content: aiMessage, timestamp: new Date() },
+      ];
+      return {
+        message: aiMessage,
+        conversationHistory: updatedHistory,
+      };
+    }
+
+    // Start checkout flow
+    const checkoutState = this.cartService.startCheckout(sessionId);
+
+    const aiMessage = `Harika! Siparişinizi tamamlayalım. 🛍️\n\n` +
+      `**Sepet Özeti:**\n` +
+      cartSummary.items.map((item, i) => 
+        `${i + 1}. ${item.title}${item.size ? ` (${item.size})` : ''} - ${item.quantity} adet - ${item.price.toFixed(2)} TL`
+      ).join('\n') +
+      `\n\n**Toplam: ${cartSummary.totalPrice.toFixed(2)} TL**\n\n` +
+      `Teslimat adresinizi paylaşır mısınız? Şu bilgileri bekliyorum:\n` +
+      `- Ad Soyad\n` +
+      `- Telefon\n` +
+      `- Adres (Mahalle, Sokak, No)\n` +
+      `- İlçe / İl\n` +
+      `- Posta Kodu`;
+
+    const updatedHistory: ChatMessage[] = [
+      ...conversationHistory,
+      { role: 'user', content: message, timestamp: new Date() },
+      { role: 'assistant', content: aiMessage, timestamp: new Date() },
+    ];
+
+    return {
+      message: aiMessage,
+      cart: cartSummary,
+      checkoutState,
+      conversationHistory: updatedHistory,
+      debug: {
+        originalQuery: message,
+        enhancedQuery: 'Checkout Init',
+        isFollowUp: false,
+        intent: UserIntent.CHECKOUT_INIT,
+      },
+    };
+  }
+
+  /**
+   * Handle PROVIDE_ADDRESS intent
+   */
+  private async handleProvideAddress(
+    sessionId: string,
+    _siteId: string,
+    message: string,
+    conversationHistory: ChatMessage[]
+  ): Promise<ChatResponse> {
+    // Parse address from message (simplified - in production, use NLP)
+    // For now, just store the raw message as address
+    const checkoutState = this.cartService.setShippingAddress(sessionId, {
+      fullName: 'Extracted Name', // Would parse from message
+      phone: '05XXXXXXXXX', // Would parse from message
+      addressLine1: message,
+      city: 'İstanbul',
+      district: 'Kadıköy',
+      postalCode: '34000',
+      country: 'Türkiye',
+    });
+
+    const aiMessage = `Teşekkürler! Adresinizi kaydettik. ✅\n\n` +
+      `Şimdi ödeme yöntemini seçelim:\n` +
+      `1. 💳 Kredi Kartı\n` +
+      `2. 💵 Kapıda Ödeme\n` +
+      `3. 🏦 Havale/EFT\n\n` +
+      `Hangi yöntemi tercih edersiniz?`;
+
+    const updatedHistory: ChatMessage[] = [
+      ...conversationHistory,
+      { role: 'user', content: message, timestamp: new Date() },
+      { role: 'assistant', content: aiMessage, timestamp: new Date() },
+    ];
+
+    return {
+      message: aiMessage,
+      checkoutState,
+      conversationHistory: updatedHistory,
+      debug: {
+        originalQuery: message,
+        enhancedQuery: 'Provide Address',
+        isFollowUp: false,
+        intent: UserIntent.PROVIDE_ADDRESS,
+      },
+    };
+  }
+
+  /**
+   * Handle PROVIDE_PAYMENT intent
+   */
+  private async handleProvidePayment(
+    sessionId: string,
+    _siteId: string,
+    message: string,
+    conversationHistory: ChatMessage[]
+  ): Promise<ChatResponse> {
+    const normalized = message.toLowerCase();
+    
+    let paymentMethod;
+    if (normalized.includes('kredi') || normalized.includes('kart')) {
+      paymentMethod = 'CREDIT_CARD';
+    } else if (normalized.includes('kapıda') || normalized.includes('nakit')) {
+      paymentMethod = 'CASH_ON_DELIVERY';
+    } else {
+      paymentMethod = 'BANK_TRANSFER';
+    }
+
+    const checkoutState = this.cartService.setPaymentMethod(
+      sessionId,
+      paymentMethod as any
+    );
+
+    const cartSummary = this.cartService.getCartSummary(sessionId);
+
+    const aiMessage = `Ödeme yönteminiz kaydedildi: ${
+      paymentMethod === 'CREDIT_CARD' ? '💳 Kredi Kartı' :
+      paymentMethod === 'CASH_ON_DELIVERY' ? '💵 Kapıda Ödeme' :
+      '🏦 Havale/EFT'
+    }\n\n` +
+      `**Sipariş Özeti:**\n` +
+      cartSummary.items.map((item, i) => 
+        `${i + 1}. ${item.title} - ${item.quantity} adet - ${item.price.toFixed(2)} TL`
+      ).join('\n') +
+      `\n\n**Toplam: ${cartSummary.totalPrice.toFixed(2)} TL**\n\n` +
+      `Siparişinizi onaylıyor musunuz? "Evet" derseniz siparişinizi oluşturalım.`;
+
+    const updatedHistory: ChatMessage[] = [
+      ...conversationHistory,
+      { role: 'user', content: message, timestamp: new Date() },
+      { role: 'assistant', content: aiMessage, timestamp: new Date() },
+    ];
+
+    return {
+      message: aiMessage,
+      cart: cartSummary,
+      checkoutState,
+      conversationHistory: updatedHistory,
+      debug: {
+        originalQuery: message,
+        enhancedQuery: 'Provide Payment',
+        isFollowUp: false,
+        intent: UserIntent.PROVIDE_PAYMENT,
+      },
+    };
+  }
+
+  /**
+   * Handle CONFIRM_ORDER intent
+   */
+  private async handleConfirmOrder(
+    sessionId: string,
+    siteId: string,
+    message: string,
+    conversationHistory: ChatMessage[]
+  ): Promise<ChatResponse> {
+    try {
+      const order = this.cartService.createOrder(sessionId, siteId);
+
+      if (!order) {
+        throw new Error('Sipariş oluşturulamadı');
+      }
+
+      const aiMessage = `🎉 Tebrikler! Siparişiniz başarıyla oluşturuldu!\n\n` +
+        `**Sipariş No:** ${order.orderId}\n` +
+        `**Toplam Tutar:** ${order.totalAmount.toFixed(2)} TL\n` +
+        `**Ödeme:** ${
+          order.paymentMethod === 'CREDIT_CARD' ? '💳 Kredi Kartı' :
+          order.paymentMethod === 'CASH_ON_DELIVERY' ? '💵 Kapıda Ödeme' :
+          '🏦 Havale/EFT'
+        }\n\n` +
+        `Siparişiniz hazırlanıyor. Kargo takip numaranızı kısa süre içinde e-posta ile göndereceğiz.\n\n` +
+        `Sipariş durumunuzu "Sipariş ${order.orderId}" yazarak takip edebilirsiniz.\n\n` +
+        `Başka bir şey için yardımcı olabilir miyim?`;
+
+      const updatedHistory: ChatMessage[] = [
+        ...conversationHistory,
+        { role: 'user', content: message, timestamp: new Date() },
+        { role: 'assistant', content: aiMessage, timestamp: new Date() },
+      ];
+
+      const checkoutState = this.cartService.getCheckoutState(sessionId);
+
+      return {
+        message: aiMessage,
+        checkoutState,
+        conversationHistory: updatedHistory,
+        debug: {
+          originalQuery: message,
+          enhancedQuery: `Order Confirmed: ${order.orderId}`,
+          isFollowUp: false,
+          intent: UserIntent.CONFIRM_ORDER,
+        },
+      };
+    } catch (error: any) {
+      const aiMessage = `Üzgünüm, sipariş oluşturulurken bir hata oluştu: ${error.message}`;
+      const updatedHistory: ChatMessage[] = [
+        ...conversationHistory,
+        { role: 'user', content: message, timestamp: new Date() },
+        { role: 'assistant', content: aiMessage, timestamp: new Date() },
+      ];
+      return {
+        message: aiMessage,
+        conversationHistory: updatedHistory,
+      };
+    }
+  }
+
+  /**
+   * Handle TRACK_ORDER intent
+   */
+  private async handleTrackOrder(
+    _sessionId: string,
+    _siteId: string,
+    message: string,
+    conversationHistory: ChatMessage[]
+  ): Promise<ChatResponse> {
+    // Extract order ID from message
+    const orderIdMatch = message.match(/ORD\d+/i);
+    
+    if (!orderIdMatch) {
+      const aiMessage = 'Sipariş numaranızı paylaşır mısınız? (Örn: ORD123456789)';
+      const updatedHistory: ChatMessage[] = [
+        ...conversationHistory,
+        { role: 'user', content: message, timestamp: new Date() },
+        { role: 'assistant', content: aiMessage, timestamp: new Date() },
+      ];
+      return {
+        message: aiMessage,
+        conversationHistory: updatedHistory,
+      };
+    }
+
+    const orderId = orderIdMatch[0];
+    const order = this.cartService.getOrder(orderId);
+
+    if (!order) {
+      const aiMessage = `${orderId} numaralı siparişi bulamadım. Sipariş numarasını kontrol eder misiniz?`;
+      const updatedHistory: ChatMessage[] = [
+        ...conversationHistory,
+        { role: 'user', content: message, timestamp: new Date() },
+        { role: 'assistant', content: aiMessage, timestamp: new Date() },
+      ];
+      return {
+        message: aiMessage,
+        conversationHistory: updatedHistory,
+      };
+    }
+
+    const statusText = {
+      PENDING: '⏳ Onay Bekliyor',
+      CONFIRMED: '✅ Onaylandı',
+      PROCESSING: '📦 Hazırlanıyor',
+      SHIPPED: '🚚 Kargoya Verildi',
+      DELIVERED: '✅ Teslim Edildi',
+      CANCELLED: '❌ İptal Edildi',
+    };
+
+    const aiMessage = `**Sipariş Durumu**\n\n` +
+      `Sipariş No: ${order.orderId}\n` +
+      `Durum: ${statusText[order.status]}\n` +
+      `Sipariş Tarihi: ${order.createdAt.toLocaleDateString('tr-TR')}\n` +
+      `Toplam: ${order.totalAmount.toFixed(2)} TL\n\n` +
+      `Ürünler:\n` +
+      order.items.map((item, i) => 
+        `${i + 1}. ${item.product.title} - ${item.quantity} adet`
+      ).join('\n') +
+      `\n\nBaşka bir konuda yardımcı olabilir miyim?`;
+
+    const updatedHistory: ChatMessage[] = [
+      ...conversationHistory,
+      { role: 'user', content: message, timestamp: new Date() },
+      { role: 'assistant', content: aiMessage, timestamp: new Date() },
+    ];
+
+    return {
+      message: aiMessage,
+      conversationHistory: updatedHistory,
+      debug: {
+        originalQuery: message,
+        enhancedQuery: `Track Order: ${orderId}`,
+        isFollowUp: false,
+        intent: UserIntent.TRACK_ORDER,
+      },
+    };
   }
 }

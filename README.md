@@ -2,6 +2,20 @@
 
 E-ticaret siteleri için yapay zeka destekli alışveriş asistanı widget'ı. Google Shopping Feed'lerinden ürün verilerini okuyarak, kullanıcılara akıllı ürün önerileri sunar ve doğal dil ile sohbet eder. **Loops.so** tarzında embeddable popup widget olarak çalışır.
 
+**🎯 Currently Supporting**: [High5.com.tr](https://high5.com.tr) - ON Running, Hoka, Asics, Saucony ve premium koşu ayakkabıları
+
+## 🚀 Gap-Gemini Model (New!)
+
+Artık **sohbet içinde satın alma** özelliği ile Gap'in Google Gemini modelini takip ediyoruz:
+- 💬 Doğal dilde ürün arama
+- 🛒 Sohbet içi sepet yönetimi  
+- 💳 In-chat checkout akışı
+- 📦 Sipariş takibi
+
+Detaylar: [GAP_GEMINI_INTEGRATION.md](GAP_GEMINI_INTEGRATION.md) | [High5 README](ShopAI/README.md)
+
+---
+
 ## 🎯 Özellikler
 
 ### 🔌 Plugin Sistemi (Loops.so Tarzı)

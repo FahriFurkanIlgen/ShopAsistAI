@@ -9,6 +9,7 @@ import searchRouter from './routes/search';
 import merchandisingRouter from './routes/merchandising';
 import tenantsRouter from './routes/tenants';
 import recommendationsRouter from './routes/recommendations';
+import cartRouter from './routes/cart';
 import { FeedParserService } from './services/feedParser';
 import { CacheService } from './services/cacheService';
 import { graphService } from './services/graphService';
@@ -69,6 +70,7 @@ app.use('/api/search', searchRouter);
 app.use('/api/merchandising', merchandisingRouter);
 app.use('/api/tenants', tenantsRouter);
 app.use('/api/recommendations', recommendationsRouter);
+app.use('/api/cart', cartRouter);
 
 // Health check
 app.get('/health', (_req: Request, res: Response) => {
@@ -142,7 +144,7 @@ const initializeFeeds = async () => {
     const siteName = process.env.SITE_NAME || 'High5 Turkey';
     
     if (feedUrl) {
-      await feedParserService.parseFeed('high5', siteName, feedUrl);
+      await feedParserService.parseFeed('high5-tr', siteName, feedUrl);
       console.log('✅ Product feeds initialized successfully');
       
       // Sync to GraphDB if enabled
